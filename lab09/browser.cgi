@@ -1,24 +1,25 @@
 #!/bin/sh
+
 echo Content-type: text/html
 echo
 
-host_address=`host $REMOTE_ADDR 2>&1|grep Name|sed 's/.*: *//'`
+#obtains environmental variables
+ip=$REMOTE_ADDR
+host_address=`host $ip | sed 's/^.* //' | sed 's/.$//'`
+browser=$HTTP_USER_AGENT
 
 cat <<eof
 <!DOCTYPE html>
-<html lang="en">
 <head>
-<title>Webserver IP, Host and Software</title>
-
+<title>Web Browser IP, Host and Software</title>
 </head>
 <body>
-
-This web server is running on at IP address: <b>$SERVER_ADDR</b>
+Your browser is running at IP address: <b>$ip</b>
 <p>
-This web server is running on hostname: <b>$SERVER_NAME</b>
+Your browser is running on hostname: <b>$host_address</b>
 <p>
-This web server is <b>$SERVER_SOFTWARE</b>
-
+Your browser identifies as: <b>$browser</b>
+<p>
 </body>
 </html>
 eof
