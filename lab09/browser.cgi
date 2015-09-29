@@ -11,7 +11,7 @@ browser=$HTTP_USER_AGENT
 cat <<eof
 <!DOCTYPE html>
 <head>
-<title>Web Browser IP, Host and Software</title>
+<title>IBrowser IP, Host and User Agent</title>
 </head>
 <body>
 Your browser is running at IP address: <b>$ip</b>
