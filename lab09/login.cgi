@@ -3,7 +3,7 @@
 use CGI qw/:all/;
 use CGI::Carp qw/fatalsToBrowser warningsToBrowser/;
 
-#run application if script is being run from command line
+#launches application version if script is being run from command line
 authenticate_user_application() if !grep(/^HTTP/, `env`);
 
 print header, start_html('Login');
@@ -65,6 +65,7 @@ exit 0;
 
 #authenticates user as command line application
 sub authenticate_user_application {
+
 	#reads in username and password
 	print "username: ";
 	my $user = <>;
