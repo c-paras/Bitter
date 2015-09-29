@@ -14,7 +14,7 @@ sub validate {
 	} elsif (luhn_checksum($number) % 10 eq 0) {
 		return "$_[0] is valid\n";
 	} else {
-		return "$_[0] is invaid\n";
+		return "$_[0] is invalid\n";
 	}
 }
 
