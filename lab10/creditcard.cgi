@@ -28,12 +28,12 @@ if (defined $credit_card) {
 	if ($validity =~ /invalid/) {
 		print '<b><span style="color:red">', $validity, "</span></b>\n<p>\n";
 		print "Try again:", "\n";
+		$credit_card =~ s/\D//g;
 
 		#reprints provided credit card number in input field
 		if ($credit_card eq "") {
 			print '<input name="credit_card" value="" type="text">', "\n";
 		} else {
-			$credit_card =~ s/\D//g;
 			print '<input name="credit_card" value=', $credit_card, ' type="text">', "\n";
 		}
 
