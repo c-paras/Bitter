@@ -4,7 +4,6 @@
 
 use CGI qw/:all/;
 use CGI::Carp qw/fatalsToBrowser warningsToBrowser/;
-use UUID::Random;
 
 print page_header();
 warningsToBrowser(1);
@@ -37,12 +36,12 @@ if (defined $token) {
 } elsif (defined param('login')) {
 		if (authenticate_user(param('username'), param('password'))) {
 			#generates unique 64-bit uuid
-			$token = UUID::Random::generate;
+			$token = `uuidgen`;
 			chomp $token;
 
 			#stores token in direcotry
 			$token_file = "$token";
-			open TOKEN, "tokens/$token" or die "Unable to write tokens/$token: $!";
+			open TOKEN, ">tokens/$token" or die "Unable to write tokens/$token: $!";
 			close TOKEN;
 
 			display_user_profile();
@@ -144,6 +143,8 @@ eof
 sub user_details {
 	my ($details_filename, $image_filename) = @_;
 	open DETAILS, "$details_filename" or die "Cannot open $details_filename: $!";
+	my $location = my $latitude = my $longitude = "Unkown";
+	my $litens = "None";
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
