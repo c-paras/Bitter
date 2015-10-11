@@ -1,34 +1,30 @@
 /*
- * written by andrewt@cse.unsw.edu.au September 2015
- * as a starting point for COMP2041/9041 assignment 2
- * http://cgi.cse.unsw.edu.au/~cs2041/assignments/bitter/
- *
- * Change (or replace) the CSS below to create you own look-and-feel
- *
- * You will probably want to add  CSS to this file too
- */
+Written by Constantinos Paraskevopoulos in October 2015
+Provides page styling for the social media platform Bitter
+*/
 
 .bitter_heading {
-    padding-top: 1em;
-    padding-bottom: 1em;
-    text-align: center;
-    font-size: x-large;
-    font-weight: bold;
-    text-decoration: underline;
+	padding-top: 0.5em;
+	padding-bottom: 0.5em;
+	text-align: center;
+	font-size: 300%;
+	font-weight: bold;
+	color: #204142;
 }
 
-.bitter_user_details {
-    background-color: #ABCDEF;
-    color: #204142;
-    white-space: pre;
-    border:thin solid #204142;
-    border-radius: 1em;
-    padding-left: 0.42em;
+.bitter_block {
+	background-color: #ABCDEF;
+	color: #204142;
+	white-space: pre;
+	border:thin solid #204142;
+	border-radius: 1em;
+	padding-left: 0.42em;
+	white-space: pre-wrap;
 }
 
 .bitter_button {
-    background-color: #FEDBCA;
-    border:thin solid #904142;
-    border-radius: 0.42em;
-    color: #904142;
+	background-color: #FEDBCA;
+	border:thin solid #904142;
+	border-radius: 0.42em;
+	color: #904142;
 }

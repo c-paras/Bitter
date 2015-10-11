@@ -1,87 +1,186 @@
 #!/usr/bin/perl -w
-
-# written by andrewt@cse.unsw.edu.au September 2015
-# as a starting point for COMP2041/9041 assignment 2
-# http://cgi.cse.unsw.edu.au/~cs2041/assignments/bitter/
+#Written by Constantinos Paraskevopoulos in October 2015
+#Provides a social media platform analogous to Twitter
 
 use CGI qw/:all/;
 use CGI::Carp qw/fatalsToBrowser warningsToBrowser/;
 
+page_header();
+warningsToBrowser(1);
 
-sub main() {
-    # print start of HTML ASAP to assist debugging if there is an error in the script
-    print page_header();
+#defines global variables
+$debug = 1;
+$dataset_size = "small";
+$users_dir = "dataset-$dataset_size/users";
+$bleats_dir = "dataset-$dataset_size/bleats";
     
-    # Now tell CGI::Carp to embed any warning in HTML
-    warningsToBrowser(1);
-    
-    # define some global variables
-    $debug = 1;
-    $dataset_size = "medium"; 
-    $users_dir = "dataset-$dataset_size/users";
-    
-    print user_page();
-    print page_trailer();
-}
+display_user_profile();
+page_trailer();
+exit 0;
 
+#shows formatted details of a user's profile
+sub display_user_profile {
+	my $n = param('n') || 0;
+	my @users = sort(glob("$users_dir/*"));
 
-#
-# Show unformatted details for user "n".
-# Increment parameter n and store it as a hidden variable
-#
-sub user_page {
-    my $n = param('n') || 0;
-    my @users = sort(glob("$users_dir/*"));
-    my $user_to_show  = $users[$n % @users];
-    my $details_filename = "$user_to_show/details.txt";
-    open my $p, "$details_filename" or die "can not open $details_filename: $!";
-    $details = join '', <$p>;
-    close $p;
-    my $next_user = $n + 1;
-    return <<eof
-<div class="bitter_user_details">
-$details
-</div>
-<p>
+	#stores paths to user's profile entities
+	my $user_to_show  = $users[$n % @users];
+	my $details_filename = "$user_to_show/details.txt";
+	my $image_filename = "$user_to_show/profile.jpg";
+	my $bleats_filename = "$user_to_show/bleats.txt";
+
+	#obtains and prints the user's profile
+	print user_details($details_filename, $image_filename);
+	print user_bleats($bleats_filename);
+
+	my $next_user = $n + 1;
+
+	#prints form to move to next user
+	print <<eof;
 <form method="POST" action="">
-    <input type="hidden" name="n" value="$next_user">
-    <input type="submit" value="Next user" class="bitter_button">
+  <input type="hidden" name="n" value="$next_user">
+  <input type="submit" value="Next user" class="bitter_button">
 </form>
 eof
 }
 
+#obtains a user's information and profile image
+sub user_details {
+	my ($details_filename, $image_filename) = @_;
+	open DETAILS, "$details_filename" or die "Cannot open $details_filename: $!";
 
-#
-# HTML placed at the top of every page
-#
+	#extracts non-sensitive user information
+	foreach $line (<DETAILS>) {
+		if ($line =~ /^full_name: (.+)/) {
+			$name = $1;
+		} elsif ($line =~ /^username: (.+)/) {
+			$user = $1;
+		} elsif ($line =~ /^home_suburb: (.+)/) {
+			$location = $1;
+		} elsif ($line =~ /^home_latitude: (.+)/) {
+			$latitude = $1;
+		} elsif ($line =~ /^home_longitude: (.+)/) {
+			$longitude = $1;
+		} elsif ($line =~ /^listens: (.+)/) {
+			$listens = $1;
+		}
+	}
+
+	close DETAILS;
+	return <<eof;
+<div class="bitter_block">
+<table>
+  <tr>
+    <td><img src="$image_filename" alt="user_image"></td>
+    <td>
+      <b><font size="15">$name</font></b>
+
+      <b>Username:</b> $user
+      <b>Suburb:</b> $location
+      <b>Latitude:</b> $latitude
+      <b>Longitude:</b> $longitude
+      <b>Listens:</b> $listens
+    <td>
+  </tr>
+</table>
+</div>
+<p>
+eof
+}
+
+#obtains a user's bleats
+sub user_bleats {
+	my $bleats_filename = $_[0];
+
+	#obtains list of user's bleats
+	open BLEATS, "$bleats_filename" or die "Cannot open $bleats_filename: $!";
+	my @user_bleats = <BLEATS>;
+	close BLEATS;
+
+	my @bleats = reverse(sort(glob("$bleats_dir/*")));
+	my $bleats_to_display = "";
+
+	#examines all available bleats
+	foreach $bleat (@bleats) {
+		$bleat =~ s/\D//g;
+
+		#adds only user's bleats to string
+		if (grep(/^$bleat$/, @user_bleats)) {
+			open BLEAT, "$bleats_dir/$bleat" or die "Cannot open $bleat: $!";
+			$bleats_to_display .= "<div class='bitter_block'>\n";
+			my ($reply, $time, $latitude, $longitude) = "";
+
+			#extracts information about the bleat
+			foreach $line (<BLEAT>) {
+				if ($line =~ /^username: (.+)/) {
+					$bleater = $1;
+				} elsif ($line =~ /^bleat: (.+)/) {
+					$bleat_to_display = $1;
+				} elsif ($line =~ /^time: (.+)/) {
+					$time = $1;
+				} elsif ($line =~ /^in_reply_to: (.+)/) {
+					$reply = $1;
+				} elsif ($line =~ /^latitude: (.+)/) {
+					$latitude = $1;
+				} elsif ($line =~ /^longitude: (.+)/) {
+					$longitude = $1;
+				}
+			}
+
+			close BLEAT;
+			$bleats_to_display .= "<b>$bleater</b> bleated <i>$bleat_to_display</i>";
+
+			#provides info about original bleat if applicable
+			if ($reply ne "") {
+				open BLEAT, "$bleats_dir/$reply" or die "Cannot open $reply: $!";
+
+				#extracts information about the original bleat
+				foreach $line (<BLEAT>) {
+					if ($line =~ /^username: (.+)/) {
+						$bleater = $1;
+					} elsif ($line =~ /^bleat: (.+)/) {
+						$bleated = $1;
+					}
+				}
+
+				$bleats_to_display .= " in response to a bleat by <b>$bleater</b>: <i>$bleated</i><br>\n";
+				close BLEAT;
+			} else {
+				$bleats_to_display .= "<br>\n";
+			}
+
+			#appends rest of info about bleat to string
+			$bleats_to_display .= "<b>Posted:</b> ".scalar localtime($time)."\n" if $time;
+			$bleats_to_display .= "<b>Latitude:</b> $latitude\n" if $latitude;
+			$bleats_to_display .= "<b>Longitude:</b> $longitude\n" if $longitude;
+			$bleats_to_display .= "\n</div>\n<p>\n";
+		}
+
+	}
+
+	return $bleats_to_display;
+}
+
+#placed at the top of every page
 sub page_header {
-    return <<eof
+	print <<eof
 Content-Type: text/html
 
 <!DOCTYPE html>
-<html lang="en">
 <head>
 <title>Bitter</title>
 <link href="bitter.css" rel="stylesheet">
 </head>
 <body>
-<div class="bitter_heading">
-Bitter
-</div>
+<div class="bitter_heading">Bitter</div>
 eof
 }
 
-
-#
-# HTML placed at the bottom of every page
-# It includes all supplied parameter values as a HTML comment
-# if global variable $debug is set
-#
+#placed at the bottom of every page
+#provides debugging information if global variable $debug is set
 sub page_trailer {
-    my $html = "";
-    $html .= join("", map("<!-- $_=".param($_)." -->\n", param())) if $debug;
-    $html .= end_html;
-    return $html;
+	my $html = "";
+	$html .= join("", map("<!-- $_=".param($_)." -->\n", param())) if $debug;
+	$html .= "</body>\n</html>";
+	print $html;
 }
-
-main();

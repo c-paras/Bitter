@@ -1,2 +1,3 @@
 Date		Time		Activity	Description
 11/10/2015	15:00-16:00	initialisation	downloaded and unzipped files, set up git
+11/10/2015	16:00-19:15	coding		finished subset 0
