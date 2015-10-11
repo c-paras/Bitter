@@ -18,7 +18,8 @@ Provides page styling for the social media platform Bitter
 	white-space: pre;
 	border:thin solid #204142;
 	border-radius: 1em;
-	padding-left: 0.42em;
+	padding-left: 1em;
+	padding-right: 1em;
 	white-space: pre-wrap;
 }
 
