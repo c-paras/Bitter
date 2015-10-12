@@ -3,7 +3,7 @@
 #Provides a social media platform analogous to Twitter
 
 use CGI qw/:all/;
-use CGI::Carp qw/fatalsToBrowser warningsToBrowser/;
+use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
 
 print page_header();
 warningsToBrowser(1);
@@ -14,7 +14,13 @@ $dataset_size = "medium";
 $users_dir = "dataset-$dataset_size/users";
 $bleats_dir = "dataset-$dataset_size/bleats";
 
-$token = param('token');
+#revokes token for previous session is user logged out
+if (defined param('logout')) {
+	my $token = param('token');
+	unlink "tokens/$token" or die "Unable to remove tokens/$token: $!";
+} else {
+	$token = param('token');
+}
 
 #main bitter hierarchy logic
 if (defined $token) {
@@ -31,6 +37,14 @@ if (defined $token) {
 			display_login_form();
 		}
 
+	} else {
+		print <<eof;
+<center>
+  <font color="red">Your session has expired.</font>
+  <p>
+</center>
+eof
+		display_login_form();
 	}
 
 } elsif (defined param('login')) {
@@ -40,8 +54,9 @@ if (defined $token) {
 			chomp $token;
 
 			#stores token in direcotry
-			$token_file = "$token";
-			open TOKEN, ">tokens/$token" or die "Unable to write tokens/$token: $!";
+			$token_file = "tokens/$token";
+			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
+			open TOKEN, ">$token_file" or die "Unable to write $token_file: $!";
 			close TOKEN;
 
 			display_user_profile();
@@ -50,7 +65,7 @@ if (defined $token) {
 		}
 } elsif (defined param('reset')) {
 	#allows user to reset password
-	print "This page is a placeholder.\n";
+	print "<font color='red'>This page is a placeholder.</font>\n";
 } else {
 	#authenticates user for first time
 	display_login_form();
@@ -82,17 +97,17 @@ sub authenticate_user {
 sub display_login_form {
 	print <<eof;
 <center>
-<form method="POST" action="">
-<table cellpadding="2">
-  <tr><td>Username</td></tr>
-  <tr><td><input type="text" name="username"></td></tr>
-  <tr><td>Password</td></tr>
-  <tr><td><input type="password" name="password"></td></tr>
-</table>
-<p>
-<input type="submit" name="login" value="Login" class="bitter_button">
-<input type="submit" name="reset" value="Reset password" class="bitter_button">
-</form>
+  <form method="POST" action="">
+    <table cellpadding="2">
+      <tr><td>Username</td></tr>
+      <tr><td><input type="text" name="username"></td></tr>
+      <tr><td>Password</td></tr>
+      <tr><td><input type="password" name="password"></td></tr>
+    </table>
+    <p>
+    <input type="submit" name="login" value="Login" class="bitter_button">
+    <input type="submit" name="reset" value="Reset password" class="bitter_button">
+  </form>
 </center>
 eof
 }
@@ -101,7 +116,7 @@ eof
 sub wrong_credentials {
 	print <<eof;
 <center>
-<font color='red'>Incorrect username or password.</font>
+  <font color='red'>Incorrect username or password.</font>
 </center>
 <br>
 eof
@@ -135,6 +150,7 @@ sub display_user_profile {
   <input type="hidden" name="n" value="$next_user">
   <input type="hidden" name="token" value="$token">
   <input type="submit" name="next" value="Next user" class="bitter_button">
+  <input type="submit" name="logout" value="Logout" class="bitter_button">
 </form>
 eof
 }
@@ -256,8 +272,8 @@ Content-type: text/html
 
 <!DOCTYPE html>
 <head>
-<title>Bitter</title>
-<link href="bitter.css" rel="stylesheet">
+  <title>Bitter</title>
+  <link href="bitter.css" rel="stylesheet">
 </head>
 <body bgcolor="#FEDCBA">
 <div class="bitter_heading">Bitter</div>
