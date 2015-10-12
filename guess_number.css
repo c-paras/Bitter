@@ -1,0 +1,20 @@
+body {
+	background-color: #FEDCBA;
+}
+
+.guess_button {
+        background-color: #FEDBCA;
+        border:thin solid #904142;
+        border-radius: 0.42em;
+        color: #904142;
+}
+
+.guess_textfield {
+	background-color: #ABCDEF;
+	color: #204142;
+	white-space: pre;
+	border:thin solid #204142;
+	border-radius: 1em;
+	padding-left: 1em;
+	padding-right: 1em;
+}
