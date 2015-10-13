@@ -3,3 +3,4 @@ Date		Time		Activity	Description
 11/10/2015	16:00-19:15	coding		finished subset 0
 11/10/2015	20:15-12:00	coding		improved layout and security, added default profile image and login system
 12/10/2015	21:00-22:00	coding		implemented secure logout and improved session handling
+13/10/2015	21:30-24:00	coding		improved logout and layout of profiles, did some of searching

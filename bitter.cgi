@@ -17,7 +17,8 @@ $bleats_dir = "dataset-$dataset_size/bleats";
 #revokes token for previous session is user logged out
 if (defined param('logout')) {
 	my $token = param('token');
-	unlink "tokens/$token" or die "Unable to remove tokens/$token: $!";
+	my $token_file = "tokens/$token";
+	unlink $token_file or die "Unable to remove $token_file: $!" if -e $token_file;
 } else {
 	$token = param('token');
 }
@@ -32,9 +33,17 @@ if (defined $token) {
 
 		#navigates to appropriate page based on user's request
 		if (defined param('next')) {
+			display_page_banner();
 			display_user_profile();
+		} elsif (defined param('home')) {
+			print "<font color='red'>This page is a placeholder.</font>\n";
+		} elsif (defined param('settings')) {
+			print "<font color='red'>This page is a placeholder.</font>\n";
+		} elsif (defined param('search')) {
+			my $search_phrase = param('search_phrase');
+			display_search_results($search_phrase);
 		} else {
-			display_login_form();
+			display_login_page();
 		}
 
 	} else {
@@ -44,7 +53,7 @@ if (defined $token) {
   <p>
 </center>
 eof
-		display_login_form();
+		display_login_page();
 	}
 
 } elsif (defined param('login')) {
@@ -59,16 +68,17 @@ eof
 			open TOKEN, ">$token_file" or die "Unable to write $token_file: $!";
 			close TOKEN;
 
+			display_page_banner();
 			display_user_profile();
 		} else {
-			wrong_credentials();
+			wrong_credentials_page();
 		}
 } elsif (defined param('reset')) {
 	#allows user to reset password
 	print "<font color='red'>This page is a placeholder.</font>\n";
 } else {
 	#authenticates user for first time
-	display_login_form();
+	display_login_page();
 }
 
 print page_trailer();
@@ -94,15 +104,21 @@ sub authenticate_user {
 }
 
 #produces a user login form
-sub display_login_form {
+sub display_login_page {
+	#omits heading if function is called with a parameter
+	my %supress_heading = @_;
+	if (!%supress_heading) {
+		print '<div class="bitter_heading">Welcome to Bitter</div>';
+	}
+
 	print <<eof;
 <center>
   <form method="POST" action="">
     <table cellpadding="2">
       <tr><td>Username</td></tr>
-      <tr><td><input type="text" name="username"></td></tr>
+      <tr><td><input type="text" name="username" class="bitter_textfield"></td></tr>
       <tr><td>Password</td></tr>
-      <tr><td><input type="password" name="password"></td></tr>
+      <tr><td><input type="password" name="password" class="bitter_textfield"></td></tr>
     </table>
     <p>
     <input type="submit" name="login" value="Login" class="bitter_button">
@@ -113,14 +129,37 @@ eof
 }
 
 #displays error message and prompts for re-authentication
-sub wrong_credentials {
+sub wrong_credentials_page {
 	print <<eof;
+<div class="bitter_heading">Welcome to Bitter</div>
 <center>
   <font color='red'>Incorrect username or password.</font>
 </center>
 <br>
 eof
-	display_login_form();
+	display_login_page(-supress_heading => "true");
+}
+
+#prints html for the bitter navigation banner
+sub display_page_banner {
+	print <<eof;
+<form method="GET" action="">
+  <table>
+    <tr>
+      <td>
+        <div class="bitter_subheading">Bitter |</div>
+        <input type="submit" name="home" value="Home" class="bitter_button">
+        <input type="submit" name="settings" value="Settings" class="bitter_button">
+        <input type="text" name="search_phrase">
+        <input type="submit" name="search" value="Search" class="bitter_button">
+        <input type="submit" value="Logout" class="bitter_button">
+        <input type="hidden" name="token" value="$token">
+      </td>
+    </tr>
+  </table>
+</form>
+<p>
+eof
 }
 
 #shows formatted details of a user's profile
@@ -148,9 +187,8 @@ sub display_user_profile {
 	print <<eof;
 <form method="POST" action="">
   <input type="hidden" name="n" value="$next_user">
-  <input type="hidden" name="token" value="$token">
   <input type="submit" name="next" value="Next user" class="bitter_button">
-  <input type="submit" name="logout" value="Logout" class="bitter_button">
+  <input type="hidden" name="token" value="$token">
 </form>
 eof
 }
@@ -190,8 +228,8 @@ sub user_details {
 
 <b>Username:</b> $user
 <b>Suburb:</b> $location
-<b>Latitude:</b> $latitude
-<b>Longitude:</b> $longitude
+<b>Home Latitude:</b> $latitude
+<b>Home Longitude:</b> $longitude
 <b>Listens:</b> $listens
     <td>
   </tr>
@@ -265,6 +303,20 @@ sub user_bleats {
 	return $bleats_to_display;
 }
 
+#computes and displays search results
+sub display_search_results {
+	my $search = $_[0];
+	$search =~ s/\.\.//g; #sanitises search phrase
+	$search =~ s/\ \ / /g; #condenses whitespace
+	my @users = sort(glob("$users_dir/*"));
+	@users = lc @users;
+	my @matches = grep(lc($search), @users);
+	print "$search\n\n"; ####
+	print "@users\n"; ####
+	display_page_banner();
+	print "$_\n" foreach @matches; ####
+}
+
 #placed at the top of every page
 sub page_header {
 	return <<eof
@@ -275,8 +327,7 @@ Content-type: text/html
   <title>Bitter</title>
   <link href="bitter.css" rel="stylesheet">
 </head>
-<body bgcolor="#FEDCBA">
-<div class="bitter_heading">Bitter</div>
+<body>
 eof
 }
 

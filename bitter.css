@@ -3,6 +3,10 @@ Written by Constantinos Paraskevopoulos in October 2015
 Provides page styling for the social media platform Bitter
 */
 
+body {
+	background-color: #FEDCBA;
+}
+
 .bitter_heading {
 	padding-top: 0.5em;
 	padding-bottom: 0.5em;
@@ -12,20 +16,40 @@ Provides page styling for the social media platform Bitter
 	color: #204142;
 }
 
+.bitter_subheading {
+	display: inline;
+	padding-top: 0.5em;
+	padding-bottom: 0.5em;
+	text-align: center;
+	font-size: 150%;
+	font-weight: bold;
+	color: #204142;
+}
+
 .bitter_block {
 	background-color: #ABCDEF;
 	color: #204142;
 	white-space: pre;
-	border:thin solid #204142;
+	border: thin solid #204142;
 	border-radius: 1em;
 	padding-left: 1em;
 	padding-right: 1em;
 	white-space: pre-wrap;
 }
 
+.bitter_textfield {
+	background-color: #ABCDEF;
+	color: #204142;
+	white-space: pre;
+	border: thin solid #204142;
+	border-radius: 0.5em;
+	padding-left: 0.5em;
+	padding-right: 1em;
+}
+
 .bitter_button {
 	background-color: #FEDBCA;
-	border:thin solid #904142;
+	border: thin solid #904142;
 	border-radius: 0.42em;
 	color: #904142;
 }
