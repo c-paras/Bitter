@@ -52,10 +52,7 @@ if (defined $token) {
 	if (length($token) > 30 && -e $token_file && -M $token_file < 1) {
 
 		#navigates to appropriate page based on user's request
-		if (defined param('next')) {
-			display_page_banner();
-			display_user_profile();
-		} elsif (defined param('home')) {
+		if (defined param('home')) {
 			print "<font color='red'>This page is a placeholder.</font>\n";
 		} elsif (defined param('settings')) {
 			print "<font color='red'>This page is a placeholder.</font>\n";
@@ -63,6 +60,10 @@ if (defined $token) {
 			my $search_phrase = param('search_phrase');
 			display_page_banner();
 			display_search_results($search_phrase);
+		} elsif (defined param('profile_to_view')) {
+			my $user_profile = param('profile_to_view');
+			display_page_banner();
+			display_user_profile($user_profile);
 		} else {
 			display_login_page();
 		}
@@ -93,7 +94,7 @@ eof
 
 			print_page_header($token);
 			display_page_banner();
-			display_user_profile();
+			display_user_profile("$users_dir/".param('username'));
 		} else {
 			print_page_header();
 			wrong_credentials_page();
@@ -197,11 +198,9 @@ eof
 
 #shows formatted details of a user's profile
 sub display_user_profile {
-	my $n = param('n') || 0;
-	my @users = sort(glob("$users_dir/*"));
-
-	#stores paths to user's profile entities
-	my $user_to_show  = $users[$n % @users];
+	#displays user profile specified as argument
+	my $user_to_show = $_[0];
+	
 	my $details_filename = "$user_to_show/details.txt";
 	my $image_filename = "profile_default.jpg"; #default profile image
 	my $bleats_filename = "$user_to_show/bleats.txt";
@@ -213,16 +212,6 @@ sub display_user_profile {
 	#obtains and prints the user's profile
 	print user_details($details_filename, $image_filename);
 	print user_bleats($bleats_filename);
-
-	my $next_user = $n + 1;
-
-	#prints form to move to next user
-	print <<eof;
-<form method="POST" action="">
-  <input type="hidden" name="n" value="$next_user">
-  <input type="submit" name="next" value="Next user" class="bitter_button">
-</form>
-eof
 }
 
 #obtains a user's information and profile image
@@ -304,7 +293,7 @@ sub user_bleats {
 			}
 
 			close BLEAT;
-			encode_output($bleat_to_display);
+			$bleat_to_display = encode_output($bleat_to_display);
 			$bleats_to_display .= "<b>$bleater</b> bleated <i>$bleat_to_display</i>";
 
 			#provides info about original bleat if applicable
@@ -317,7 +306,7 @@ sub user_bleats {
 					$bleated = $1 if $line =~ /^bleat: (.+)/;
 				}
 
-				encode_output($bleated);
+				$bleated = encode_output($bleated);
 				$bleats_to_display .= " in response to a bleat by <b>$bleater</b>: <i>$bleated</i>";
 				close BLEAT;
 			}
@@ -375,7 +364,7 @@ sub display_search_results {
 
 	}
 
-	encode_output($search_term); ###not working?????????????????
+	$search_term = encode_output($search_term);
 
 	#dispays username and full name of matches or message that no results were found
 	if ($i eq 0) {
@@ -383,30 +372,20 @@ sub display_search_results {
 	} else {
 		print "<b>Found $i search results for '$search_term':</b>\n<p>\n";
 
-		#prints a form for each match, displaying user name, full name and link to profile
+		#prints a form for each match, displaying usernames and full names
 		foreach $key (sort(keys %matches)) {
 			print "<i>$matches{$key}</i>\n<br>\n";
 			$key =~ s/$users_dir\///;
 			print <<eof;
-Username: <a href="" id="$users_dir/$key" onclick="view('$users_dir/$key')">$key</a>
-<p>
-eof
-#if parameter starts with $users_dir...display profile
-		}
-print <<eof;
-<form method="GET" action="" id="view_profile">
-  <input type="submit" name="profil" id="profil" value="ssss">
-  <input type="hidden" name="profile_to_view" id="profile_to_view">
+<form method="GET" action="">
+  Username: <input type="submit" name="view_profile" value="$key" class="bitter_link">
+<input type="hidden" name="profile_to_view" value="$users_dir/$key">
 </form>
-
-<script type="text/javascript">
-  function view(user) {
-    document.getElementById("profile_to_view").value = user;
-    document.getElementById("profil").value = user;
-    document.getElementById("view_profile").submit();
-  }
-</script>
+<p>
+<br>
 eof
+		}
+
 	}
 
 }
@@ -438,7 +417,7 @@ sub print_page_trailer {
 		#prints param='value' for each parameter
 		foreach $param (param()) {
 			my $value = param($param);
-			encode_output($input);
+			$input = encode_output($input);
 			print "$param='$value' ";
 		}
 
@@ -452,10 +431,11 @@ eof
 }
 
 #sanitises a given output string by escaping html metacharacters
-sub encode_output(\$) {
+sub encode_output {
 	$input = $_[0] || '';
 	$input =~ s/\"/&quot/g;
 	$input =~ s/\&/&amp/g;
 	$input =~ s/\</&lt/g;
 	$input =~ s/\>/&gt/g;
+	return $input;
 }

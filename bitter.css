@@ -56,7 +56,9 @@ body {
 
 .bitter_link {
 	cursor: pointer;
-	cursof: hand;
+	cursor: hand;
+	color: blue;
+	border: none;
 	background-color: transparent;
 	text-decoration: underline;
 }
