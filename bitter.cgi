@@ -61,6 +61,7 @@ if (defined $token) {
 			print "<font color='red'>This page is a placeholder.</font>\n";
 		} elsif (defined param('search')) {
 			my $search_phrase = param('search_phrase');
+			display_page_banner();
 			display_search_results($search_phrase);
 		} else {
 			display_login_page();
@@ -336,16 +337,37 @@ sub user_bleats {
 
 #computes and displays search results
 sub display_search_results {
-	my $search = $_[0];
+	my $search_term = $_[0];
+	my $search = $search_term;
 	$search =~ s/\.\.//g; #sanitises search phrase
 	$search =~ s/\ \ / /g; #condenses whitespace
 	my @users = sort(glob("$users_dir/*"));
-	@users = lc @users;
-	my @matches = grep(lc($search), @users);
-	print "$search\n\n"; ####
-	print "@users\n"; ####
-	display_page_banner();
-	print "$_\n" foreach @matches; ####
+	my $i = 0;
+
+	#checks whether requested user exists
+	for $user (@users) {
+
+		if ($user =~ /$search/i) {
+			#matches user with given username
+			$matches[$i] = $user;
+			$i++;
+		} else {
+			#matches user with given full name
+			my $user_info = "$user/details.txt";
+			open USER, $user_info or die "Cannot access $user_info: $!";
+			foreach $line (<USER>) {
+				if ($line =~ /^full_name:.*$search/i) {
+					$matches[$i] = $user;
+					$i++;
+				}
+			}
+			close USER;
+		}
+
+	}
+
+	print "No results matching '$search_term'\n" if $i eq 0;
+	print @matches if $i ne 0;
 }
 
 #placed at the top of every page
