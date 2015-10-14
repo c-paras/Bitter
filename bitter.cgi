@@ -5,8 +5,6 @@
 use CGI qw/:all/;
 use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
 
-print page_header();
-warningsToBrowser(1);
 $debug = 1;
 
 #declares global variables relating to user data
@@ -14,13 +12,35 @@ $dataset_size = "medium";
 $users_dir = "dataset-$dataset_size/users";
 $bleats_dir = "dataset-$dataset_size/bleats";
 
-#revokes token for previous session is user logged out
-if (defined param('logout')) {
-	my $token = param('token');
+#obtains session id token if it exists
+if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w\-]{30,})/) {
+	$token = $1;
 	my $token_file = "tokens/$token";
-	unlink $token_file or die "Unable to remove $token_file: $!" if -e $token_file;
-} else {
-	$token = param('token');
+
+	#securely logs user out if requested
+	if (defined param('logout')) {
+
+		#revokes token for previous session if user logged out
+		if (-e $token_file) {
+			unlink $token_file or die "Unable to remove $token_file: $!";
+		}
+
+		#displays landing page and exits
+		print_page_header();
+		display_login_page();
+		print_page_trailer();
+		exit 0;
+	} else {
+
+		#sets cookie in response iff it is valid and has been issued recently
+		if (length($token) > 30 && -e $token_file && -M $token_file < 1) {
+			print_page_header($token);
+		} else {
+			print_page_header();
+		}
+
+	}
+
 }
 
 #main bitter hierarchy logic
@@ -47,13 +67,15 @@ if (defined $token) {
 		}
 
 	} else {
+		#requests re-authentication if invalid token or session expired
 		print <<eof;
+<div class="bitter_heading">Welcome to Bitter</div>
 <center>
   <font color="red">Your session has expired.</font>
   <p>
 </center>
 eof
-		display_login_page();
+		display_login_page(-supress_heading => "true");
 	}
 
 } elsif (defined param('login')) {
@@ -68,20 +90,24 @@ eof
 			open TOKEN, ">$token_file" or die "Unable to write $token_file: $!";
 			close TOKEN;
 
+			print_page_header($token);
 			display_page_banner();
 			display_user_profile();
 		} else {
+			print_page_header();
 			wrong_credentials_page();
 		}
 } elsif (defined param('reset')) {
 	#allows user to reset password
+	print_page_header();
 	print "<font color='red'>This page is a placeholder.</font>\n";
 } else {
 	#authenticates user for first time
+	print_page_header();
 	display_login_page();
 }
 
-print page_trailer();
+print_page_trailer();
 exit 0;
 
 #validates user login credentials
@@ -150,13 +176,19 @@ sub display_page_banner {
         <div class="bitter_subheading">Bitter |</div>
         <input type="submit" name="home" value="Home" class="bitter_button">
         <input type="submit" name="settings" value="Settings" class="bitter_button">
-        <input type="text" name="search_phrase">
-        <input type="submit" name="search" value="Search" class="bitter_button">
-        <input type="submit" value="Logout" class="bitter_button">
-        <input type="hidden" name="token" value="$token">
+        <input type="text" name="search_phrase" onkeypress="perform_search(event)">
+        <input type="submit" name="search" id="search" value="Search" class="bitter_button">
+        <input type="submit" name="logout" value="Logout" class="bitter_button">
       </td>
     </tr>
   </table>
+  <script type="text/javascript">
+    function perform_search(e) {
+        if (e.keyCode === 13) {
+          document.getElementById("search").click();
+        }
+    }
+  </script>
 </form>
 <p>
 eof
@@ -188,7 +220,6 @@ sub display_user_profile {
 <form method="POST" action="">
   <input type="hidden" name="n" value="$next_user">
   <input type="submit" name="next" value="Next user" class="bitter_button">
-  <input type="hidden" name="token" value="$token">
 </form>
 eof
 }
@@ -318,9 +349,11 @@ sub display_search_results {
 }
 
 #placed at the top of every page
-sub page_header {
-	return <<eof
+sub print_page_header {
+	my $token = $_[0] || ''; #obtains session id from passing argument if it exists
+	print <<eof;
 Content-type: text/html
+Set-cookie: token=$token
 
 <!DOCTYPE html>
 <head>
@@ -329,20 +362,35 @@ Content-type: text/html
 </head>
 <body>
 eof
+	warningsToBrowser(1); #enables warnings as html comments
 }
 
 #placed at the bottom of every page
-#provides debugging information if global variable $debug is set
-sub page_trailer {
-	my $footer = "";
-	$footer .= join("", map("<!-- $_=".param($_)." -->\n", param())) if $debug;
-	$footer .= "</body>\n</html>";
-	return $footer;
+sub print_page_trailer {
+
+	#provides debugging information if global variable $debug is set
+	if ($debug) {
+		print "<!-- ";
+
+		#prints param='value' for each parameter
+		foreach $param (param()) {
+			my $value = param($param);
+			encode_output($input);
+			print "$param='$value' ";
+		}
+
+		print "-->\n";
+	}
+
+	print <<eof;
+</body>
+</html>
+eof
 }
 
 #sanitises a given output string by escaping html metacharacters
 sub encode_output(\$) {
-	$input = $_[0];
+	$input = $_[0] || '';
 	$input =~ s/\"/&quot/g;
 	$input =~ s/\&/&amp/g;
 	$input =~ s/\</&lt/g;
