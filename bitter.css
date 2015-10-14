@@ -53,3 +53,10 @@ body {
 	border-radius: 0.42em;
 	color: #904142;
 }
+
+.bitter_link {
+	cursor: pointer;
+	cursof: hand;
+	background-color: transparent;
+	text-decoration: underline;
+}

@@ -341,7 +341,7 @@ sub display_search_results {
 	my $search = $search_term;
 	$search =~ s/\.\.//g; #sanitises search phrase
 	$search =~ s/\ \ / /g; #condenses whitespace
-	my @users = sort(glob("$users_dir/*"));
+	my @users = glob("$users_dir/*");
 	my $i = 0;
 
 	#checks whether requested user exists
@@ -349,15 +349,24 @@ sub display_search_results {
 
 		if ($user =~ /$search/i) {
 			#matches user with given username
-			$matches[$i] = $user;
+			my $user_info = "$user/details.txt";
+			open USER, $user_info or die "Cannot access $user_info: $!";
+
+			#obtains full name of user
+			foreach $line (<USER>) {
+				$full_name = $1 if ($line =~ /^full_name: (.+)/i);
+			}
+
+			close USER;
+			$matches{$user} = $full_name;
 			$i++;
 		} else {
 			#matches user with given full name
 			my $user_info = "$user/details.txt";
 			open USER, $user_info or die "Cannot access $user_info: $!";
 			foreach $line (<USER>) {
-				if ($line =~ /^full_name:.*$search/i) {
-					$matches[$i] = $user;
+				if ($line =~ /^full_name: (.*$search.*)/i) {
+					$matches{$user} = $1;
 					$i++;
 				}
 			}
@@ -366,8 +375,40 @@ sub display_search_results {
 
 	}
 
-	print "No results matching '$search_term'\n" if $i eq 0;
-	print @matches if $i ne 0;
+	encode_output($search_term); ###not working?????????????????
+
+	#dispays username and full name of matches or message that no results were found
+	if ($i eq 0) {
+		print "No search results found for '$search_term'\n";
+	} else {
+		print "<b>Found $i search results for '$search_term':</b>\n<p>\n";
+
+		#prints a form for each match, displaying user name, full name and link to profile
+		foreach $key (sort(keys %matches)) {
+			print "<i>$matches{$key}</i>\n<br>\n";
+			$key =~ s/$users_dir\///;
+			print <<eof;
+Username: <a href="" id="$users_dir/$key" onclick="view('$users_dir/$key')">$key</a>
+<p>
+eof
+#if parameter starts with $users_dir...display profile
+		}
+print <<eof;
+<form method="GET" action="" id="view_profile">
+  <input type="submit" name="profil" id="profil" value="ssss">
+  <input type="hidden" name="profile_to_view" id="profile_to_view">
+</form>
+
+<script type="text/javascript">
+  function view(user) {
+    document.getElementById("profile_to_view").value = user;
+    document.getElementById("profil").value = user;
+    document.getElementById("view_profile").submit();
+  }
+</script>
+eof
+	}
+
 }
 
 #placed at the top of every page
