@@ -5,4 +5,5 @@ Date		Time		Activity	Description
 12/10/2015	21:00-22:00	coding		implemented secure logout and improved session handling
 13/10/2015	21:30-24:00	coding		improved logout and layout of profiles, did some of searching
 14/10/2015	16:00-19:15	debugging	fixed user logout and implemented session ids via a cookie, fixed search button
-12/10/2015	21:00-01:00	coding		implemented searching feature for usernames and full names
+14/10/2015	21:00-01:00	coding		implemented searching feature for usernames and full names
+17/10/2015	10:30-		coding		basic bug fixes, 

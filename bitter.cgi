@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 #Written by Constantinos Paraskevopoulos in October 2015
 #Provides a social media platform analogous to Twitter
+#http://www.cse.unsw.edu.au/~cs2041/assignments/bitter/
 
 use CGI qw/:all/;
 use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
@@ -89,7 +90,7 @@ eof
 			#stores token in direcotry
 			$token_file = "tokens/$token";
 			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
-			open TOKEN, ">$token_file" or die "Unable to write $token_file: $!";
+			open TOKEN, ">", "$token_file" or die "Unable to write $token_file: $!";
 			close TOKEN;
 
 			print_page_header($token);
@@ -121,7 +122,7 @@ sub authenticate_user {
 	return 0 if ! -e $details_filename; #checks whether user exists
 
 	#opens user details and extracts stored password
-	open USER, "$details_filename" or die "Cannot open $details_filename: $!";
+	open USER, "<", "$details_filename" or die "Cannot open $details_filename: $!";
 	foreach (<USER>) {
 		$expected_password = $1 if $_ =~ /^password: (.+)/;
 	}
@@ -217,7 +218,7 @@ sub display_user_profile {
 #obtains a user's information and profile image
 sub user_details {
 	my ($details_filename, $image_filename) = @_;
-	open DETAILS, "$details_filename" or die "Cannot open $details_filename: $!";
+	open DETAILS, "<", "$details_filename" or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = "Unkown";
 	my $litens = "None";
 
@@ -265,7 +266,7 @@ sub user_bleats {
 	my $bleats_filename = $_[0];
 
 	#obtains list of user's bleats
-	open BLEATS, "$bleats_filename" or die "Cannot open $bleats_filename: $!";
+	open BLEATS, "<", "$bleats_filename" or die "Cannot open $bleats_filename: $!";
 	my @user_bleats = <BLEATS>;
 	close BLEATS;
 
@@ -278,7 +279,8 @@ sub user_bleats {
 
 		#adds only user's bleats to string
 		if (grep(/^$bleat$/, @user_bleats)) {
-			open BLEAT, "$bleats_dir/$bleat" or die "Cannot open $bleats_dir/$bleat: $!";
+			my $bleat_file = "$bleats_dir/$bleat";
+			open BLEAT, "<", "$bleat_file" or die "Cannot open $bleat_file: $!";
 			$bleats_to_display .= "<div class='bitter_block'>\n";
 			my ($reply, $time, $latitude, $longitude) = "";
 
@@ -298,7 +300,8 @@ sub user_bleats {
 
 			#provides info about original bleat if applicable
 			if ($reply ne "") {
-				open BLEAT, "$bleats_dir/$reply" or die "Cannot open $bleats_dir/$reply: $!";
+				my $bleat_file = "$bleats_dir/$reply";
+				open BLEAT, "<", "$bleat_file" or die "Cannot open $bleat_file: $!";
 
 				#extracts information about the original bleat
 				foreach $line (<BLEAT>) {
@@ -327,6 +330,13 @@ sub user_bleats {
 #computes and displays search results
 sub display_search_results {
 	my $search_term = $_[0];
+
+	#aborts if user did not enter a search phrase 
+	if (length($search_term) == 0) {
+		print "Please enter a search phrase first\n";
+		return;
+	}
+
 	my $search = $search_term;
 	$search =~ s/\.\.//g; #sanitises search phrase
 	$search =~ s/\ \ / /g; #condenses whitespace
@@ -339,7 +349,7 @@ sub display_search_results {
 		if ($user =~ /$search/i) {
 			#matches user with given username
 			my $user_info = "$user/details.txt";
-			open USER, $user_info or die "Cannot access $user_info: $!";
+			open USER, "<", $user_info or die "Cannot access $user_info: $!";
 
 			#obtains full name of user
 			foreach $line (<USER>) {
@@ -352,7 +362,7 @@ sub display_search_results {
 		} else {
 			#matches user with given full name
 			my $user_info = "$user/details.txt";
-			open USER, $user_info or die "Cannot access $user_info: $!";
+			open USER, "<", $user_info or die "Cannot access $user_info: $!";
 			foreach $line (<USER>) {
 				if ($line =~ /^full_name: (.*$search.*)/i) {
 					$matches{$user} = $1;
@@ -368,9 +378,9 @@ sub display_search_results {
 
 	#dispays username and full name of matches or message that no results were found
 	if ($i eq 0) {
-		print "No search results found for '$search_term'\n";
+		print "No search results found for \"$search_term\"\n";
 	} else {
-		print "<b>Found $i search results for '$search_term':</b>\n<p>\n";
+		print "<b>Found $i search results for \"$search_term\":</b>\n<p>\n";
 
 		#prints a form for each match, displaying usernames and full names
 		foreach $key (sort(keys %matches)) {
@@ -379,7 +389,7 @@ sub display_search_results {
 			print <<eof;
 <form method="GET" action="">
   Username: <input type="submit" name="view_profile" value="$key" class="bitter_link">
-<input type="hidden" name="profile_to_view" value="$users_dir/$key">
+  <input type="hidden" name="profile_to_view" value="$users_dir/$key">
 </form>
 <p>
 <br>
@@ -433,7 +443,6 @@ eof
 #sanitises a given output string by escaping html metacharacters
 sub encode_output {
 	$input = $_[0] || '';
-	$input =~ s/\"/&quot/g;
 	$input =~ s/\&/&amp/g;
 	$input =~ s/\</&lt/g;
 	$input =~ s/\>/&gt/g;
