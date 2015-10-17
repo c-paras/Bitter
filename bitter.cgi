@@ -9,7 +9,7 @@ use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
 $debug = 1;
 
 #declares global variables relating to user data
-$dataset_size = "backup";
+$dataset_size = "medium";
 $users_dir = "dataset-$dataset_size/users";
 $bleats_dir = "dataset-$dataset_size/bleats";
 
@@ -348,11 +348,11 @@ sub listen_option {
 
 	close USER;
 
-	$type = "Unlisten" if grep(/^$user$/, $listens);
-	$type = "Listen to" if !grep(/^$user$/, $listens);
+	$type = "Unlisten" if grep(/$user/, $listens);
+	$type = "Listen to" if !grep(/$user/, $listens);
 
 	return <<eof;
-<form method="GET" action="">
+<form method="POST" action="">
   <input type="submit" name="listen" value="$type $user" class="bitter_button">
 </form>
 eof
@@ -575,17 +575,51 @@ sub listen_to_user {
 
 	if ($user =~ /^Unlisten (.+)/) {
 		my $unlisten_to = $1;
-		open USER, ">", $user_profile or die "Cannot access $user_profile: $!";
+		open USER, "<", $user_profile or die "Cannot access $user_profile: $!";
+		my $i = 0;
+
+		#removes $unlisten_to user from the listen data
 		while (<USER>) {
 			$_ =~ s/$unlisten_to//;
+			$_ =~ s/ $//;
+			$lines[$i++] = $_;
 		}
+
 		close USER;
+
+		#updates user detail file
+		open USER, ">", $user_profile or die "Cannot access $user_profile: $!";
+		print USER @lines;
+		close USER;
+
+		display_page_banner();
+		display_user_profile("$users_dir/$unlisten_to");
 	} elsif ($user =~ /^Listen to (.+)/) {
 		my $listen_to = $1;
-		
+		open USER, "<", $user_profile or die "Cannot access $user_profile: $!";
+		my $i = 0;
+
+		#appends $listen_to user to the listen data
+		while (<USER>) {
+			if ($_ =~ /^(listens: .+)/) {
+				my $current_listens = $1;
+				$current_listens .= " $listen_to\n";
+				$lines[$i++] = $current_listens;
+			} else {
+				$lines[$i++] = $_;
+			}
+		}
+
+		close USER;
+
+		#updates user detail file
+		open USER, ">", $user_profile or die "Cannot access $user_profile: $!";
+		print USER @lines;
+		close USER;
+		display_page_banner();
+		display_user_profile("$users_dir/$listen_to");
 	}
 
-	print "hello, world\n";
 }
 
 #placed at the top of every page
