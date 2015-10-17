@@ -33,9 +33,23 @@ if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w\-]{30,})/) {
 		exit 0;
 	} else {
 
-		#sets cookie in response iff it is valid and has been issued recently
+		#checks whether cookie is valid and has been issued recently
 		if (length($token) > 30 && -e $token_file && -M $token_file < 1) {
-			print_page_header($token);
+
+			#only sets cookie if user is not attempting to login
+			if (!defined param('login')) {
+				print_page_header($token, $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/);
+			} else {
+				print_page_header();
+				print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Please log in again.");
+  }
+</script>
+eof
+			}
+
 		} else {
 			print_page_header();
 		}
@@ -53,14 +67,21 @@ if (defined $token) {
 	if (length($token) > 30 && -e $token_file && -M $token_file < 1) {
 
 		#navigates to appropriate page based on user's request
-		if (defined param('home')) {
-			print "<font color='red'>This page is a placeholder.</font>\n";
+		if (defined param('home') && $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/) {
+			my $user = $1;
+			display_page_banner();
+			display_user_profile("$users_dir/$user");
 		} elsif (defined param('settings')) {
 			print "<font color='red'>This page is a placeholder.</font>\n";
 		} elsif (defined param('search')) {
 			my $search_phrase = param('search_phrase');
 			display_page_banner();
 			display_search_results($search_phrase);
+		} elsif (defined param('send_bleat')) {
+			my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+			add_bleat($current_user[0], param('bleat_to_send'));
+			display_page_banner();
+			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('profile_to_view')) {
 			my $user_profile = param('profile_to_view');
 			display_page_banner();
@@ -93,7 +114,7 @@ eof
 			open TOKEN, ">", "$token_file" or die "Unable to write $token_file: $!";
 			close TOKEN;
 
-			print_page_header($token);
+			print_page_header($token, param('username'));
 			display_page_banner();
 			display_user_profile("$users_dir/".param('username'));
 		} else {
@@ -177,7 +198,7 @@ sub display_page_banner {
     <tr>
       <td>
         <div class="bitter_subheading">Bitter |</div>
-        <input type="submit" name="home" value="Home" class="bitter_button">
+        <input type="submit" name="home" value="My Profile" class="bitter_button">
         <input type="submit" name="settings" value="Settings" class="bitter_button">
         <input type="text" name="search_phrase" onkeypress="perform_search(event)">
         <input type="submit" name="search" id="search" value="Search" class="bitter_button">
@@ -212,6 +233,10 @@ sub display_user_profile {
 
 	#obtains and prints the user's profile
 	print user_details($details_filename, $image_filename);
+	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+	$current_user[0] = param('username') if $current_user[0] eq "";
+	$user_to_show =~ s/$users_dir\///;
+	print bleat_block() if $user_to_show eq $current_user[0];
 	print user_bleats($bleats_filename);
 }
 
@@ -259,6 +284,48 @@ sub user_details {
 </div>
 <p>
 eof
+}
+
+#provides interface for sending new bleats
+sub bleat_block {
+	return <<eof;
+<div class="bitter_block">
+<form method="GET" action="">
+  <textarea style="width: 100% resize: vertical" rows="10" name="bleat_to_send">
+  </textarea>
+  <input type="submit" name="send_bleat" value="Send Bleat" class="bitter_button">
+</form>
+</div>
+<p>
+eof
+}
+
+#appends bleat to collection of bleats for current user
+sub add_bleat {
+	my ($current_user, $bleat_to_send) = @_;
+	$bleat_to_send = substr($bleat_to_send, 0, 142);
+
+	#finds greatest unique identifier and increments by 50
+	my @bleats = reverse(sort(glob("$bleats_dir/*")));
+	$bleats[0] =~ s/$bleats_dir\///;
+	$bleats[0] += 50;
+
+	#adds bleat identifier to user record
+	my $user_bleats = "$users_dir/$current_user/bleats.txt";
+	open USER, ">>", "$user_bleats" or die "Cannot write $user_bleats: $!";
+	print USER "$bleats[0]\n";
+	close USER;
+
+	#adds bleat to bleats collection
+	my $unix_time = time();
+	my $bleat_file = "$bleats_dir/$bleats[0]";
+	open BLEAT, ">", "$bleat_file" or die "Cannot write $bleat_file: $!";
+	print BLEAT <<eof;
+username: $current_user
+bleat: $bleat_to_send
+time: $unix_time
+eof
+	close BLEAT;
 }
 
 #obtains a user's bleats
@@ -333,7 +400,7 @@ sub display_search_results {
 
 	#aborts if user did not enter a search phrase 
 	if (length($search_term) == 0) {
-		print "Please enter a search phrase first\n";
+		print "Please enter a search phrase first.\n";
 		return;
 	}
 
@@ -403,9 +470,11 @@ eof
 #placed at the top of every page
 sub print_page_header {
 	my $token = $_[0] || ''; #obtains session id from passing argument if it exists
+	my $user = $_[1] || ''; #obtains username from passing argument if it exists
 	print <<eof;
 Content-type: text/html
-Set-cookie: token=$token
+Set-cookie: token=$token; HttpOnly
+Set-cookie: user=$user; HttpOnly
 
 <!DOCTYPE html>
 <head>
