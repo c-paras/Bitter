@@ -7,4 +7,4 @@ Date		Time		Activity	Description
 14/10/2015	16:00-19:15	debugging	fixed user logout and implemented session ids via a cookie, fixed search button
 14/10/2015	21:00-01:00	coding		implemented searching feature for usernames and full names
 17/10/2015	10:30-13:15	coding		minor bug fixes, implemented sending of bleats
-17/10/2015	14:00-		coding		updated css for profile page
+17/10/2015	14:00-		coding		updated css for profile page, partially implemented viewing of relevant bleats

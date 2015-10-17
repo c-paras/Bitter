@@ -232,14 +232,23 @@ sub display_user_profile {
 	$image_filename = $_ foreach (@profile_image);
 
 	#obtains and prints the user's profile
-	print "<table align=\"left\"><tr><td>\n";
+	print "<table cellpadding=\"8\" align=\"left\"><tr><td>\n";
 	print user_details($details_filename, $image_filename);
+
+	#finds currently logged-in user
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 	$current_user[0] = param('username') if $current_user[0] eq "";
 	$user_to_show =~ s/$users_dir\///;
-	print bleat_block() if $user_to_show eq $current_user[0];
-	print "</td></tr></table>\n";
-	print user_bleats($bleats_filename);
+
+	#prints additional bleats and option to send bleat if user_to_show == current_user
+	if ($user_to_show eq $current_user[0]) {
+		print bleat_block();
+		print "</td></tr></table>\n<br>\n";
+		print user_bleats($bleats_filename, -display_relevant => "true");
+	} else {
+		print "</td></tr></table>\n<br>\n";
+		print user_bleats($bleats_filename);
+	}
 
 }
 
@@ -248,7 +257,7 @@ sub user_details {
 	my ($details_filename, $image_filename) = @_;
 	open DETAILS, "<", "$details_filename" or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = "Unkown";
-	my $litens = "None";
+	$listens = "None";
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
@@ -334,13 +343,24 @@ eof
 #obtains a user's bleats
 sub user_bleats {
 	my $bleats_filename = $_[0];
+	my $show_relevant = $_[1] | '';
 
 	#obtains list of user's bleats
 	open BLEATS, "<", "$bleats_filename" or die "Cannot open $bleats_filename: $!";
-	my @user_bleats = <BLEATS>;
+	push @user_bleats, <BLEATS>;
 	close BLEATS;
 
 	my @bleats = reverse(sort(glob("$bleats_dir/*")));
+
+	#returns bleats of user listened to by logged in user
+	if ($show_relevant eq "-supress_recursion") {
+		foreach $bleat (@bleats) {
+				push @bleats_of_listner, $bleat if grep(/^$bleat$/, @user_bleats);
+		}
+		return @bleats_of_listner;
+	}
+
+	@bleats = add_relevant_bleats($bleats_filename, @bleats) if $show_relevant ne '';
 	my $bleats_to_display = "";
 
 	#examines all available bleats
@@ -395,6 +415,26 @@ sub user_bleats {
 	}
 
 	return $bleats_to_display;
+}
+
+#appends and sorts bleats that mention user and bleats of users they listen to
+sub add_relevant_bleats {
+	my ($bleats_filename, @bleats) = ($_[0], @_);
+	$bleats_filename =~ s/$users_dir\/(.+)\/bleats.txt/$1/;
+
+	#adds bleats which mention the user
+	###########################################################
+	###########################################################
+
+	@listens = split / /, $listens;
+
+	#cycles through all listens and appends bleats by those users
+	foreach $user (@listens) {
+		my $listen = "$users_dir/$user/bleats.txt";
+		push @bleats, user_bleats($listen, -supress_recursion => "true");
+	}
+
+	return reverse(sort(@bleats));
 }
 
 #computes and displays search results
@@ -486,7 +526,7 @@ Set-cookie: user=$user; HttpOnly
 </head>
 <body>
 eof
-	warningsToBrowser(1); #enables warnings as html comments
+	warningsToBrowser(1) if $debug; #enables warnings as html comments
 }
 
 #placed at the bottom of every page
