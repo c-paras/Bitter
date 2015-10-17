@@ -35,6 +35,21 @@ body {
 	border-radius: 1em;
 	padding-left: 1em;
 	padding-right: 1em;
+	width: 350px;
+	text-align: center;
+	float: left;
+	white-space: pre-wrap;
+}
+
+.bleat_block {
+	background-color: #ABCDEF;
+	color: #204142;
+	white-space: pre;
+	border: thin solid #204142;
+	border-radius: 1em;
+	padding-left: 1em;
+	padding-right: 1.2em;
+	overflow: hidden;
 	white-space: pre-wrap;
 }
 

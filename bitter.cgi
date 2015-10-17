@@ -232,12 +232,15 @@ sub display_user_profile {
 	$image_filename = $_ foreach (@profile_image);
 
 	#obtains and prints the user's profile
+	print "<table align=\"left\"><tr><td>\n";
 	print user_details($details_filename, $image_filename);
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 	$current_user[0] = param('username') if $current_user[0] eq "";
 	$user_to_show =~ s/$users_dir\///;
 	print bleat_block() if $user_to_show eq $current_user[0];
+	print "</td></tr></table>\n";
 	print user_bleats($bleats_filename);
+
 }
 
 #obtains a user's information and profile image
@@ -269,34 +272,34 @@ sub user_details {
 <div class="bitter_block">
 <table cellpadding="10">
   <tr>
-    <td><img src="$image_filename" alt="$user profile image"></td>
     <td>
       <b><font size="10">$name</font></b>
 
-<b>Username:</b> $user
-<b>Suburb:</b> $location
-<b>Home Latitude:</b> $latitude
-<b>Home Longitude:</b> $longitude
-<b>Listens:</b> $listens
+      <img src="$image_filename" alt="$user profile image" style="center: parent">
+
+      <b>Username:</b> $user
+      <b>Suburb:</b> $location
+      <b>Home Latitude:</b> $latitude
+      <b>Home Longitude:</b> $longitude
+      <b>Listens:</b> $listens
     <td>
   </tr>
 </table>
 </div>
-<p>
 eof
 }
 
 #provides interface for sending new bleats
 sub bleat_block {
 	return <<eof;
-<div class="bitter_block">
+</td><tr><td>
+<div class="bleat_block">
+<b>Send a new bleat:</b>
 <form method="GET" action="">
-  <textarea style="width: 100% resize: vertical" rows="10" name="bleat_to_send">
-  </textarea>
+  <textarea style="width: 100%" rows="10" name="bleat_to_send"></textarea>
   <input type="submit" name="send_bleat" value="Send Bleat" class="bitter_button">
 </form>
 </div>
-<p>
 eof
 }
 
@@ -348,7 +351,7 @@ sub user_bleats {
 		if (grep(/^$bleat$/, @user_bleats)) {
 			my $bleat_file = "$bleats_dir/$bleat";
 			open BLEAT, "<", "$bleat_file" or die "Cannot open $bleat_file: $!";
-			$bleats_to_display .= "<div class='bitter_block'>\n";
+			$bleats_to_display .= "<div class='bleat_block'>\n";
 			my ($reply, $time, $latitude, $longitude) = "";
 
 			#extracts information about the bleat
