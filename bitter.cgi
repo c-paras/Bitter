@@ -9,7 +9,7 @@ use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
 $debug = 1;
 
 #declares global variables relating to user data
-$dataset_size = "medium";
+$dataset_size = "backup";
 $users_dir = "dataset-$dataset_size/users";
 $bleats_dir = "dataset-$dataset_size/bleats";
 
@@ -44,7 +44,7 @@ if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w\-]{30,})/) {
 				print <<eof;
 <script type="text/javascript">
   window.onload = function() {
-    alert("Please log in again.");
+    alert("Authentication failed. Please log in to continue.");
   }
 </script>
 eof
@@ -65,12 +65,22 @@ if (defined $token) {
 
 	#checks that token is valid and has been issued within the last day
 	if (length($token) > 30 && -e $token_file && -M $token_file < 1) {
+		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+		my $details_filename = "$users_dir/$current_user[0]/details.txt";
+
+		#checks that valid user is logged in
+		if (!open USER, "<", $details_filename) {
+			display_login_page();
+			print_page_trailer();
+			exit 0;
+		}
+
+		close USER;
 
 		#navigates to appropriate page based on user's request
-		if (defined param('home') && $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/) {
-			my $user = $1;
+		if (defined param('home')) {
 			display_page_banner();
-			display_user_profile("$users_dir/$user");
+			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('settings')) {
 			print "<font color='red'>This page is a placeholder.</font>\n";
 		} elsif (defined param('search')) {
@@ -78,7 +88,6 @@ if (defined $token) {
 			display_page_banner();
 			display_search_results($search_phrase);
 		} elsif (defined param('send_bleat')) {
-			my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 			add_bleat($current_user[0], param('bleat_to_send'));
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
@@ -86,6 +95,8 @@ if (defined $token) {
 			my $user_profile = param('profile_to_view');
 			display_page_banner();
 			display_user_profile($user_profile);
+		} elsif (defined param('listen')) {
+			listen_to_user(param('listen'), $current_user[0]);
 		} else {
 			display_login_page();
 		}
@@ -231,21 +242,22 @@ sub display_user_profile {
 	my @profile_image = glob("$user_to_show/profile.*");
 	$image_filename = $_ foreach (@profile_image);
 
-	#obtains and prints the user's profile
-	print "<table cellpadding=\"8\" align=\"left\"><tr><td>\n";
-	print user_details($details_filename, $image_filename);
-
 	#finds currently logged-in user
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 	$current_user[0] = param('username') if $current_user[0] eq "";
 	$user_to_show =~ s/$users_dir\///;
 
-	#prints additional bleats and option to send bleat if user_to_show == current_user
+	print '<table cellpadding="8" align="left"><tr><td>', "\n";
+
 	if ($user_to_show eq $current_user[0]) {
-		print bleat_block();
+		#prints additional bleats if user_to_show == current_user
+		print user_details($details_filename, $image_filename);
+		print bleat_block(); #option to send a bleat
 		print "</td></tr></table>\n<br>\n";
 		print user_bleats($bleats_filename, -display_relevant => "true");
 	} else {
+		#prints listen/unlisten option if user_to_show != current_user
+		print user_details($details_filename, $image_filename, $current_user[0]);
 		print "</td></tr></table>\n<br>\n";
 		print user_bleats($bleats_filename);
 	}
@@ -254,7 +266,8 @@ sub display_user_profile {
 
 #obtains a user's information and profile image
 sub user_details {
-	my ($details_filename, $image_filename) = @_;
+	my ($details_filename, $image_filename) = ($_[0], $_[1]);
+	my $listen_option = $_[2] || '';
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = "Unkown";
 	$listens = "None";
@@ -277,7 +290,7 @@ sub user_details {
 	}
 
 	close DETAILS;
-	return <<eof;
+	my $details = <<eof;
 <div class="bitter_block">
 <table cellpadding="10">
   <tr>
@@ -291,11 +304,17 @@ sub user_details {
       <b>Home Latitude:</b> $latitude
       <b>Home Longitude:</b> $longitude
       <b>Listens:</b> $listens
+eof
+
+	$details .= listen_option($user, $listen_option) if $listen_option ne "";
+
+$details .= <<eof;
     <td>
   </tr>
 </table>
 </div>
 eof
+	return $details;
 }
 
 #provides interface for sending new bleats
@@ -309,6 +328,33 @@ sub bleat_block {
   <input type="submit" name="send_bleat" value="Send Bleat" class="bitter_button">
 </form>
 </div>
+eof
+}
+
+#provides option for listening/unlistening user
+sub listen_option {
+	my ($user, $current_user) = @_;
+	my $user_profile = "$users_dir/$current_user/details.txt";
+	my $listens = "";
+	open USER, "<", "$user_profile" or die "Cannot access $user_profile: $!";
+
+	#finds listens of current user
+	while (<USER>) {
+		if ($_ =~ /^listens: (.+)/) {
+			$listens = $1;
+			last;
+		}
+	}
+
+	close USER;
+
+	$type = "Unlisten" if grep(/^$user$/, $listens);
+	$type = "Listen to" if !grep(/^$user$/, $listens);
+
+	return <<eof;
+<form method="GET" action="">
+  <input type="submit" name="listen" value="$type $user" class="bitter_button">
+</form>
 eof
 }
 
@@ -368,7 +414,7 @@ sub user_bleats {
 	foreach $bleat (@bleats) {
 		$bleat =~ s/\D//g;
 
-		#adds only user's bleats to string
+		#adds only user's relevant bleats to string
 		if (grep(/^$bleat$/, @user_bleats)) {
 			my $bleat_file = "$bleats_dir/$bleat";
 			open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
@@ -520,6 +566,26 @@ eof
 
 	}
 
+}
+
+#toggles listening/unlistening to specified user
+sub listen_to_user {
+	my ($user, $current_user) = @_;
+	my $user_profile = "$users_dir/$current_user/details.txt";
+
+	if ($user =~ /^Unlisten (.+)/) {
+		my $unlisten_to = $1;
+		open USER, ">", $user_profile or die "Cannot access $user_profile: $!";
+		while (<USER>) {
+			$_ =~ s/$unlisten_to//;
+		}
+		close USER;
+	} elsif ($user =~ /^Listen to (.+)/) {
+		my $listen_to = $1;
+		
+	}
+
+	print "hello, world\n";
 }
 
 #placed at the top of every page
