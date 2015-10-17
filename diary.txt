@@ -8,4 +8,4 @@ Date		Time		Activity	Description
 14/10/2015	21:00-01:00	coding		implemented searching feature for usernames and full names
 17/10/2015	10:30-13:15	coding		minor bug fixes, implemented sending of bleats
 17/10/2015	14:00-18:20	coding		updated css for profile page, implemented viewing of relevant bleats, partially implemented listen/unlisten feature
-17/10/2015	20:00-20:30	debugging	fixed listen/unlisten feature
+17/10/2015	20:00-21:50	debugging	fixed listen/unlisten feature

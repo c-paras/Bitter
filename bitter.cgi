@@ -23,7 +23,7 @@ if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w\-]{30,})/) {
 
 		#revokes token for previous session if user logged out
 		if (-e $token_file) {
-			unlink $token_file or die "Unable to remove $token_file: $!";
+			unlink $token_file or die "Cannot remove $token_file: $!";
 		}
 
 		#displays landing page and exits
@@ -96,7 +96,7 @@ if (defined $token) {
 			display_page_banner();
 			display_user_profile($user_profile);
 		} elsif (defined param('listen')) {
-			listen_to_user(param('listen'), $current_user[0]);
+			listen_to_user(param('listen'), $current_user[0], param('previous_page'));
 		} else {
 			display_login_page();
 		}
@@ -122,7 +122,7 @@ eof
 			#stores token in direcotry
 			$token_file = "tokens/$token";
 			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
-			open TOKEN, ">", $token_file or die "Unable to write $token_file: $!";
+			open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
 			close TOKEN;
 
 			print_page_header($token, param('username'));
@@ -194,7 +194,7 @@ sub wrong_credentials_page {
 	print <<eof;
 <div class="bitter_heading">Welcome to Bitter</div>
 <center>
-  <font color='red'>Incorrect username or password.</font>
+  <font color="red">Incorrect username or password.</font>
 </center>
 <br>
 eof
@@ -286,6 +286,8 @@ sub user_details {
 			$longitude = $1;
 		} elsif ($line =~ /^listens: (.+)/) {
 			$listens = $1;
+			$listens =~ s/\s{2,}/ /g; #condenses whitespace
+			$listens = "None" if $listens eq " ";
 		}
 	}
 
@@ -306,7 +308,7 @@ sub user_details {
       <b>Listens:</b> $listens
 eof
 
-	$details .= listen_option($user, $listen_option) if $listen_option ne "";
+	$details .= listen_option($user, $listen_option, "profile") if $listen_option ne "";
 
 $details .= <<eof;
     <td>
@@ -333,10 +335,10 @@ eof
 
 #provides option for listening/unlistening user
 sub listen_option {
-	my ($user, $current_user) = @_;
+	my ($user, $current_user, $current_page) = @_;
 	my $user_profile = "$users_dir/$current_user/details.txt";
 	my $listens = "";
-	open USER, "<", "$user_profile" or die "Cannot access $user_profile: $!";
+	open USER, "<", "$user_profile" or die "Cannot open $user_profile: $!";
 
 	#finds listens of current user
 	while (<USER>) {
@@ -354,6 +356,7 @@ sub listen_option {
 	return <<eof;
 <form method="POST" action="">
   <input type="submit" name="listen" value="$type $user" class="bitter_button">
+  <input type="hidden" name="previous_page" value="$current_page">
 </form>
 eof
 }
@@ -392,6 +395,7 @@ sub user_bleats {
 	my $show_relevant = $_[1] | '';
 
 	#obtains list of user's bleats
+	return if $bleats_filename =~ /None\/bleats.txt$/;
 	open BLEATS, "<", $bleats_filename or die "Cannot open $bleats_filename: $!";
 	push @user_bleats, <BLEATS>;
 	close BLEATS;
@@ -407,7 +411,8 @@ sub user_bleats {
 	}
 
 	$bleats_filename =~ s/$users_dir\/(.+)\/bleats.txt/$1/; #extracts user
-	add_relevant_bleats($bleats_filename, @bleats) if $show_relevant ne '';
+	my $user = $bleats_filename;
+	add_relevant_bleats($user, @bleats) if $show_relevant ne '';
 	my $bleats_to_display = "";
 
 	#examines all available bleats
@@ -439,6 +444,7 @@ sub user_bleats {
 			if ($reply ne "") {
 				my $bleat_file = "$bleats_dir/$reply";
 				open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
+				my $bleater = "";
 
 				#extracts information about the original bleat
 				foreach $line (<BLEAT>) {
@@ -456,6 +462,11 @@ sub user_bleats {
 			$bleats_to_display .= "<b>Posted:</b> ".scalar localtime($time)."\n" if $time;
 			$bleats_to_display .= "<b>Latitude:</b> $latitude\n" if $latitude;
 			$bleats_to_display .= "<b>Longitude:</b> $longitude\n" if $longitude;
+			my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+			$current_user[0] = param('username') if !$current_user[0];
+			if ($user eq $current_user[0] && $bleater ne $current_user[0]) {
+				$bleats_to_display .= listen_option($bleater, $current_user[0], "home");
+			}
 			$bleats_to_display .= "\n</div>\n<p>\n";
 		}
 
@@ -489,6 +500,7 @@ sub add_relevant_bleats {
 
 	#cycles through all listens and appends bleats by those users
 	foreach $user (@listens) {
+		next if $user eq "";
 		my $listen = "$users_dir/$user/bleats.txt";
 		push @bleats, user_bleats($listen, -supress_recursion => "true");
 	}
@@ -498,16 +510,16 @@ sub add_relevant_bleats {
 #computes and displays search results
 sub display_search_results {
 	my $search_term = $_[0];
+	my $search = $search_term;
+	$search =~ s/\s{2,}/ /g; #condenses whitespace
 
 	#aborts if user did not enter a search phrase 
-	if (length($search_term) == 0) {
+	if (length($search) == 0 || $search eq " ") {
 		print "Please enter a search phrase first.\n";
 		return;
 	}
 
-	my $search = $search_term;
 	$search =~ s/\.\.//g; #sanitises search phrase
-	$search =~ s/\ \ / /g; #condenses whitespace
 	my @users = glob("$users_dir/*");
 	my $i = 0;
 
@@ -517,7 +529,7 @@ sub display_search_results {
 		if ($user =~ /$search/i) {
 			#matches user with given username
 			my $user_info = "$user/details.txt";
-			open USER, "<", $user_info or die "Cannot access $user_info: $!";
+			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 
 			#obtains full name of user
 			foreach $line (<USER>) {
@@ -530,7 +542,7 @@ sub display_search_results {
 		} else {
 			#matches user with given full name
 			my $user_info = "$user/details.txt";
-			open USER, "<", $user_info or die "Cannot access $user_info: $!";
+			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 			foreach $line (<USER>) {
 				if ($line =~ /^full_name: (.*$search.*)/i) {
 					$matches{$user} = $1;
@@ -570,12 +582,13 @@ eof
 
 #toggles listening/unlistening to specified user
 sub listen_to_user {
-	my ($user, $current_user) = @_;
+	my ($user, $current_user, $previous_page) = @_;
 	my $user_profile = "$users_dir/$current_user/details.txt";
+	display_page_banner();
 
 	if ($user =~ /^Unlisten (.+)/) {
 		my $unlisten_to = $1;
-		open USER, "<", $user_profile or die "Cannot access $user_profile: $!";
+		open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
 		my $i = 0;
 
 		#removes $unlisten_to user from the listen data
@@ -588,15 +601,14 @@ sub listen_to_user {
 		close USER;
 
 		#updates user detail file
-		open USER, ">", $user_profile or die "Cannot access $user_profile: $!";
+		open USER, ">", $user_profile or die "Cannot write $user_profile: $!";
 		print USER @lines;
 		close USER;
 
-		display_page_banner();
-		display_user_profile("$users_dir/$unlisten_to");
+		display_user_profile("$users_dir/$unlisten_to") if $previous_page eq "profile";
 	} elsif ($user =~ /^Listen to (.+)/) {
 		my $listen_to = $1;
-		open USER, "<", $user_profile or die "Cannot access $user_profile: $!";
+		open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
 		my $i = 0;
 
 		#appends $listen_to user to the listen data
@@ -613,13 +625,13 @@ sub listen_to_user {
 		close USER;
 
 		#updates user detail file
-		open USER, ">", $user_profile or die "Cannot access $user_profile: $!";
+		open USER, ">", $user_profile or die "Cannot write $user_profile: $!";
 		print USER @lines;
 		close USER;
-		display_page_banner();
-		display_user_profile("$users_dir/$listen_to");
+		display_user_profile("$users_dir/$listen_to") if $previous_page eq "profile";	
 	}
 
+	display_user_profile("$users_dir/$current_user") if $previous_page eq "home";
 }
 
 #placed at the top of every page
