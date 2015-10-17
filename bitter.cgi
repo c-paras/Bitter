@@ -111,7 +111,7 @@ eof
 			#stores token in direcotry
 			$token_file = "tokens/$token";
 			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
-			open TOKEN, ">", "$token_file" or die "Unable to write $token_file: $!";
+			open TOKEN, ">", $token_file or die "Unable to write $token_file: $!";
 			close TOKEN;
 
 			print_page_header($token, param('username'));
@@ -143,7 +143,7 @@ sub authenticate_user {
 	return 0 if ! -e $details_filename; #checks whether user exists
 
 	#opens user details and extracts stored password
-	open USER, "<", "$details_filename" or die "Cannot open $details_filename: $!";
+	open USER, "<", $details_filename or die "Cannot open $details_filename: $!";
 	foreach (<USER>) {
 		$expected_password = $1 if $_ =~ /^password: (.+)/;
 	}
@@ -198,7 +198,7 @@ sub display_page_banner {
     <tr>
       <td>
         <div class="bitter_subheading">Bitter |</div>
-        <input type="submit" name="home" value="My Profile" class="bitter_button">
+        <input type="submit" name="home" value="Home" class="bitter_button">
         <input type="submit" name="settings" value="Settings" class="bitter_button">
         <input type="text" name="search_phrase" onkeypress="perform_search(event)">
         <input type="submit" name="search" id="search" value="Search" class="bitter_button">
@@ -255,7 +255,7 @@ sub display_user_profile {
 #obtains a user's information and profile image
 sub user_details {
 	my ($details_filename, $image_filename) = @_;
-	open DETAILS, "<", "$details_filename" or die "Cannot open $details_filename: $!";
+	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = "Unkown";
 	$listens = "None";
 
@@ -324,7 +324,7 @@ sub add_bleat {
 
 	#adds bleat identifier to user record
 	my $user_bleats = "$users_dir/$current_user/bleats.txt";
-	open USER, ">>", "$user_bleats" or die "Cannot write $user_bleats: $!";
+	open USER, ">>", $user_bleats or die "Cannot write $user_bleats: $!";
 	print USER "$bleats[0]\n";
 	close USER;
 
@@ -346,7 +346,7 @@ sub user_bleats {
 	my $show_relevant = $_[1] | '';
 
 	#obtains list of user's bleats
-	open BLEATS, "<", "$bleats_filename" or die "Cannot open $bleats_filename: $!";
+	open BLEATS, "<", $bleats_filename or die "Cannot open $bleats_filename: $!";
 	push @user_bleats, <BLEATS>;
 	close BLEATS;
 
@@ -360,7 +360,8 @@ sub user_bleats {
 		return @bleats_of_listner;
 	}
 
-	@bleats = add_relevant_bleats($bleats_filename, @bleats) if $show_relevant ne '';
+	$bleats_filename =~ s/$users_dir\/(.+)\/bleats.txt/$1/; #extracts user
+	add_relevant_bleats($bleats_filename, @bleats) if $show_relevant ne '';
 	my $bleats_to_display = "";
 
 	#examines all available bleats
@@ -370,7 +371,7 @@ sub user_bleats {
 		#adds only user's bleats to string
 		if (grep(/^$bleat$/, @user_bleats)) {
 			my $bleat_file = "$bleats_dir/$bleat";
-			open BLEAT, "<", "$bleat_file" or die "Cannot open $bleat_file: $!";
+			open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
 			$bleats_to_display .= "<div class='bleat_block'>\n";
 			my ($reply, $time, $latitude, $longitude) = "";
 
@@ -391,7 +392,7 @@ sub user_bleats {
 			#provides info about original bleat if applicable
 			if ($reply ne "") {
 				my $bleat_file = "$bleats_dir/$reply";
-				open BLEAT, "<", "$bleat_file" or die "Cannot open $bleat_file: $!";
+				open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
 
 				#extracts information about the original bleat
 				foreach $line (<BLEAT>) {
@@ -419,14 +420,26 @@ sub user_bleats {
 
 #appends and sorts bleats that mention user and bleats of users they listen to
 sub add_relevant_bleats {
-	my ($bleats_filename, @bleats) = ($_[0], @_);
-	$bleats_filename =~ s/$users_dir\/(.+)\/bleats.txt/$1/;
+	my ($username, @bleats) = ($_[0], @_);
 
 	#adds bleats which mention the user
-	###########################################################
-	###########################################################
+	my @all_bleats = glob("$bleats_dir/*");
+	foreach $bleat (@all_bleats) {
+		$bleat =~ s/\D//g;
+		my $bleat_to_check = "$bleats_dir/$bleat";
+		open BLEAT, "<", $bleat_to_check or die "Cannot open $bleat_to_check: $!";
 
-	@listens = split / /, $listens;
+		#checks whether bleat mentions user
+		my $mentioned = 0;
+		while (<BLEAT>) {
+			$mentioned = 1 if $_ =~ /^bleat:.*$username.*/;
+		}
+
+		push @user_bleats, $bleat if $mentioned;
+		close BLEAT;
+	}
+
+	my @listens = split / /, $listens;
 
 	#cycles through all listens and appends bleats by those users
 	foreach $user (@listens) {
@@ -434,7 +447,6 @@ sub add_relevant_bleats {
 		push @bleats, user_bleats($listen, -supress_recursion => "true");
 	}
 
-	return reverse(sort(@bleats));
 }
 
 #computes and displays search results
