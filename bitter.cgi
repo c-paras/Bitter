@@ -84,9 +84,9 @@ if (defined $token) {
 		} elsif (defined param('settings')) {
 			print "<font color=\"red\">This page is a placeholder.</font>\n";
 		} elsif (defined param('search')) {
-			display_page_banner(param('search_sphrase'), param('search_type'));
+			display_page_banner(param('search_phrase'), param('search_type'));
 			display_search_results(param('search_phrase'), param('search_type'));
-		} elsif (defined param('send_bleat')) {
+		} elsif (defined param('bleat_to_send')) {
 			add_bleat($current_user[0], param('bleat_to_send'), param('in_reply_to'));
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
@@ -202,6 +202,7 @@ eof
 #prints html for the bitter navigation banner
 sub display_page_banner {
 	my $search_phrase = $_[0] || '';
+	$search_phrase = encode_output($search_phrase);
 	my $type = $_[1] || '';
 	print <<eof;
 <form method="GET" action="">
@@ -257,7 +258,7 @@ sub display_user_profile {
 
 	#finds currently logged-in user
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-	$current_user[0] = param('username') if $current_user[0] eq "";
+	$current_user[0] = param('username') if !$current_user[0];
 	$user_to_show =~ s/$users_dir\///;
 
 	print '<table cellpadding="8" align="left"><tr><td>', "\n";
@@ -307,28 +308,20 @@ sub user_details {
 	close DETAILS;
 	my $details = <<eof;
 <div class="bitter_block">
-<table cellpadding="10">
-  <tr>
-    <td>
-      <b><font size="10">$name</font></b>
+  <b><font size="10">$name</font></b>
 
-      <img src="$image_filename" alt="$user profile image" style="center: parent;">
+<img src="$image_filename" alt="$user profile image" style="center: parent;">
 
-      <b>Username:</b> $user
-      <b>Suburb:</b> $location
-      <b>Home Latitude:</b> $latitude
-      <b>Home Longitude:</b> $longitude
-      <b>Listens:</b> $listens
+<b>Username:</b> $user
+<b>Suburb:</b> $location
+<b>Home Latitude:</b> $latitude
+<b>Home Longitude:</b> $longitude
+<b>Listens:</b> $listens
 eof
 
-	$details .= listen_option($user, $listen_option, "profile") if $listen_option ne "";
+	$details .= listen_option($user, $listen_option, "profile")."</form>\n" if $listen_option ne "";
 
-$details .= <<eof;
-    <td>
-  </tr>
-</table>
-</div>
-eof
+	$details .= "\n</div>\n";
 	return $details;
 }
 
@@ -338,13 +331,21 @@ sub bleat_block {
 </td><tr><td>
 <div class="bleat_block">
 <b>Send a new bleat:</b>
-<form method="POST" action="">
-  <textarea style="width: 100%; resize: none;" rows="10" name="bleat_to_send" id="bleat_to_send">
+<form id="bleat_form" method="POST" action="">
+  <textarea name="bleat_to_send" id="bleat_to_send" style="width: 100%; resize: none; height: 200px;">
 </textarea>
-  <input type="submit" name="send_bleat" id="send_bleat" value="Send Bleat" class="bitter_button">
+  <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
   <input type="hidden" name="in_reply_to" id="in_reply_to">
 </form>
 </div>
+<script type="text/javascript">
+  function create_bleat() {
+    var user_text = document.getElementById("bleat_to_send").value;
+    if (user_text.match(/^\\s*\$/) === null) {
+      document.getElementById("bleat_form").submit();
+    }
+  }
+</script>
 eof
 }
 
@@ -369,10 +370,9 @@ sub listen_option {
 	$type = "Listen to" if !grep(/$user/, $listens);
 
 	return <<eof;
-<form method="POST" action="">
+<form method="POST" action="" style="margin-bottom: 0px;">
   <input type="submit" name="listen" value="$type $user" class="bitter_button">
   <input type="hidden" name="previous_page" value="$current_page">
-</form>
 eof
 }
 
@@ -409,7 +409,7 @@ eof
 #obtains a user's bleats
 sub user_bleats {
 	my $bleats_filename = $_[0];
-	my $show_relevant = $_[1] | '';
+	my $show_relevant = $_[1] || '';
 
 	#obtains list of user's bleats
 	return if $bleats_filename =~ /None\/bleats.txt$/;
@@ -485,12 +485,27 @@ sub user_bleats {
 				$bleats_to_display .= listen_option($bleater, $current_user[0], "home");
 			}
 			if ($bleater ne $current_user[0]) {
+				$bleats_to_display .= '<form method="POST" action="">'."\n" if $user ne $current_user[0];
 				$bleats_to_display .= reply_to_bleat($bleater, $bleat);
 			}
 			$bleats_to_display .= "\n</div>\n<p>\n";
 		}
 
 	}
+
+	#appends javascript to allow the user to type a reply to a bleat using a prompt
+	$bleats_to_display .= <<eof;
+<script type="text/javascript">
+  function reply_field(bleat_id) {
+    var msg = prompt("Enter reply:");
+    if (msg.match(/^\\s*\$/) === null) {
+      document.getElementById("bleat_to_send").value = msg;
+      document.getElementById("in_reply_to").value = bleat_id;
+      document.getElementById("send_bleat").click();
+    }
+  }
+</script>
+eof
 
 	return $bleats_to_display;
 }
@@ -531,32 +546,22 @@ sub add_relevant_bleats {
 sub reply_to_bleat {
 	my ($bleater, $bleat_id) = ($_[0], $_[1]);
 	return <<eof;
-<form method="POST" action="">
-  <input type="button" name="reply" value="Reply to $bleater" class="bitter_button" onclick="reply_field();">
+  <input type="button" name="reply" value="Reply to $bleater" onclick="reply_field($bleat_id);" class="bitter_button">
 </form>
-<script type="text/javascript">
-  function reply_field() {
-    var msg = prompt("Enter reply:");
-    if (msg) {
-      document.getElementById("bleat_to_send").value = msg;
-      document.getElementById("in_reply_to").value = $bleat_id;
-      document.getElementById("send_bleat").click();
-    }
-  }
-</script>
 eof
 }
 
 #computes and displays search results
 sub display_search_results {
 	my ($search_term, $search_type) = ($_[0], $_[1]);
+	$search_term =~ s/\s{2,}/ /g; #condenses whitespace
+	$search_term =~ s/(\||\\|\.|\/)//g; #sanitises search phrase
 	my $search = $search_term;
-	$search =~ s/\s{2,}/ /g; #condenses whitespace	
 	$search_term = encode_output($search_term);
 
 	#aborts if user did not enter a valid search phrase 
 	if (length($search) == 0 || $search eq " ") {
-		print "Please enter a search phrase first.\n";
+		print "Please enter a valid search phrase.\n";
 		return;
 	}
 
@@ -568,7 +573,7 @@ sub display_search_results {
 	#finds all users matching $search
 	for $user (@users) {
 
-		if ($user =~ /$search/i) {
+		if (index(lc $user, lc $search) != -1) {
 			#matches user with given username
 			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
@@ -604,14 +609,15 @@ sub display_search_results {
 		}
 
 		close BLEAT;
-		$bleats{$username} .= "$bleat_msg<br>\n" and $i++ if $bleat_msg =~ /$search/i;
+		$bleats{$username} .= "$bleat_msg<br>\n" and $i++ if index(lc $bleat_msg, lc $search) != -1;
 	}
 
 	#dispays results which matched $search or a message that no results were found
 	if ($i eq 0) {
 		print "No search results found for \"$search_term\"\n";
 	} else {
-		print "<b>Found $i search results for \"$search_term\":</b>\n";
+		print "<b>Found $i search result for \"$search_term\":</b>\n" if $i == 1;
+		print "<b>Found $i search results for \"$search_term\":</b>\n" if $i > 1;
 		generate_search_results("Username", %users) if $search_type ne "bleats";
 		generate_search_results("Bleated by", %bleats) if $search_type ne "users";
 	}
@@ -743,8 +749,10 @@ eof
 #sanitises a given output string by escaping html metacharacters
 sub encode_output {
 	$input = $_[0] || '';
-	$input =~ s/\&/&amp/g;
-	$input =~ s/\</&lt/g;
-	$input =~ s/\>/&gt/g;
+	$input =~ s/\&/&amp;/g;
+	$input =~ s/\'/&apos;/g;
+	$input =~ s/\"/&quot;/g;
+	$input =~ s/\</&lt;/g;
+	$input =~ s/\>/&gt;/g;
 	return $input;
 }
