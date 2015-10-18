@@ -84,10 +84,10 @@ if (defined $token) {
 		} elsif (defined param('settings')) {
 			print "<font color=\"red\">This page is a placeholder.</font>\n";
 		} elsif (defined param('search')) {
-			display_page_banner(param('search_phrase'), param('search_type'));
+			display_page_banner(param('search_sphrase'), param('search_type'));
 			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('send_bleat')) {
-			add_bleat($current_user[0], param('bleat_to_send'));
+			add_bleat($current_user[0], param('bleat_to_send'), param('in_reply_to'));
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('profile_to_view')) {
@@ -211,7 +211,7 @@ sub display_page_banner {
         <div class="bitter_subheading">Bitter |</div>
         <input type="submit" name="home" value="Home" class="bitter_button">
         <input type="submit" name="settings" value="Settings" class="bitter_button">
-        <input type="text" name="search_phrase" value="$search_phrase" onkeypress="perform_search(event)">
+        <input type="text" name="search_phrase" value="$search_phrase" onkeypress="perform_search(event);">
         <select name="search_type" class="bitter_button">
 eof
 
@@ -338,10 +338,11 @@ sub bleat_block {
 </td><tr><td>
 <div class="bleat_block">
 <b>Send a new bleat:</b>
-<form method="GET" action="">
-  <textarea style="width: 100%; resize: none;" rows="10" name="bleat_to_send">
+<form method="POST" action="">
+  <textarea style="width: 100%; resize: none;" rows="10" name="bleat_to_send" id="bleat_to_send">
 </textarea>
-  <input type="submit" name="send_bleat" value="Send Bleat" class="bitter_button">
+  <input type="submit" name="send_bleat" id="send_bleat" value="Send Bleat" class="bitter_button">
+  <input type="hidden" name="in_reply_to" id="in_reply_to">
 </form>
 </div>
 eof
@@ -377,7 +378,7 @@ eof
 
 #appends bleat to collection of bleats for current user
 sub add_bleat {
-	my ($current_user, $bleat_to_send) = @_;
+	my ($current_user, $bleat_to_send, $in_reply_to) = @_;
 	$bleat_to_send = substr($bleat_to_send, 0, 142); #limits length of bleat
 	$bleat_to_send =~ s/\n/ /g; #converts all newlines to spaces
 
@@ -401,6 +402,7 @@ username: $current_user
 bleat: $bleat_to_send
 time: $unix_time
 eof
+	print BLEAT "in_reply_to: $in_reply_to\n" if $in_reply_to =~ /^\d{10,}$/;
 	close BLEAT;
 }
 
@@ -482,6 +484,9 @@ sub user_bleats {
 			if ($user eq $current_user[0] && $bleater ne $current_user[0]) {
 				$bleats_to_display .= listen_option($bleater, $current_user[0], "home");
 			}
+			if ($bleater ne $current_user[0]) {
+				$bleats_to_display .= reply_to_bleat($bleater, $bleat);
+			}
 			$bleats_to_display .= "\n</div>\n<p>\n";
 		}
 
@@ -520,6 +525,26 @@ sub add_relevant_bleats {
 		push @bleats, user_bleats($listen, -supress_recursion => "true");
 	}
 
+}
+
+#prints user form for replying to a bleat
+sub reply_to_bleat {
+	my ($bleater, $bleat_id) = ($_[0], $_[1]);
+	return <<eof;
+<form method="POST" action="">
+  <input type="button" name="reply" value="Reply to $bleater" class="bitter_button" onclick="reply_field();">
+</form>
+<script type="text/javascript">
+  function reply_field() {
+    var msg = prompt("Enter reply:");
+    if (msg) {
+      document.getElementById("bleat_to_send").value = msg;
+      document.getElementById("in_reply_to").value = $bleat_id;
+      document.getElementById("send_bleat").click();
+    }
+  }
+</script>
+eof
 }
 
 #computes and displays search results
