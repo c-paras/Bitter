@@ -82,19 +82,17 @@ if (defined $token) {
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('settings')) {
-			print "<font color='red'>This page is a placeholder.</font>\n";
+			print "<font color=\"red\">This page is a placeholder.</font>\n";
 		} elsif (defined param('search')) {
-			my $search_phrase = param('search_phrase');
-			display_page_banner();
-			display_search_results($search_phrase);
+			display_page_banner(param('search_phrase'), param('search_type'));
+			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('send_bleat')) {
 			add_bleat($current_user[0], param('bleat_to_send'));
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('profile_to_view')) {
-			my $user_profile = param('profile_to_view');
 			display_page_banner();
-			display_user_profile($user_profile);
+			display_user_profile(param('profile_to_view'));
 		} elsif (defined param('listen')) {
 			listen_to_user(param('listen'), $current_user[0], param('previous_page'));
 		} else {
@@ -135,7 +133,7 @@ eof
 } elsif (defined param('reset')) {
 	#allows user to reset password
 	print_page_header();
-	print "<font color='red'>This page is a placeholder.</font>\n";
+	print "<font color=\"red\">This page is a placeholder.</font>\n";
 } else {
 	#authenticates user for first time
 	print_page_header();
@@ -203,6 +201,8 @@ eof
 
 #prints html for the bitter navigation banner
 sub display_page_banner {
+	my $search_phrase = $_[0] || '';
+	my $type = $_[1] || '';
 	print <<eof;
 <form method="GET" action="">
   <table>
@@ -211,7 +211,20 @@ sub display_page_banner {
         <div class="bitter_subheading">Bitter |</div>
         <input type="submit" name="home" value="Home" class="bitter_button">
         <input type="submit" name="settings" value="Settings" class="bitter_button">
-        <input type="text" name="search_phrase" onkeypress="perform_search(event)">
+        <input type="text" name="search_phrase" value="$search_phrase" onkeypress="perform_search(event)">
+        <select name="search_type" class="bitter_button">
+eof
+
+	#prints search options with default value == that which was selected
+	print "<option value=\"users\" selected>Users</option>\n" if $type eq "users";
+	print "<option value=\"users\">Users</option>\n" if $type ne "users";
+	print "<option value=\"bleats\" selected>Bleats</option>\n" if $type eq "bleats";
+	print "<option value=\"bleats\">Bleats</option>\n" if $type ne "bleats";
+	print "<option value=\"all\" selected>All</option>\n" if $type eq "all";
+	print "<option value=\"all\">All</option>\n" if $type ne "all";
+
+	print <<eof;
+        </select>
         <input type="submit" name="search" id="search" value="Search" class="bitter_button">
         <input type="submit" name="logout" value="Logout" class="bitter_button">
       </td>
@@ -299,7 +312,7 @@ sub user_details {
     <td>
       <b><font size="10">$name</font></b>
 
-      <img src="$image_filename" alt="$user profile image" style="center: parent">
+      <img src="$image_filename" alt="$user profile image" style="center: parent;">
 
       <b>Username:</b> $user
       <b>Suburb:</b> $location
@@ -326,7 +339,8 @@ sub bleat_block {
 <div class="bleat_block">
 <b>Send a new bleat:</b>
 <form method="GET" action="">
-  <textarea style="width: 100%" rows="10" name="bleat_to_send"></textarea>
+  <textarea style="width: 100%; resize: none;" rows="10" name="bleat_to_send">
+</textarea>
   <input type="submit" name="send_bleat" value="Send Bleat" class="bitter_button">
 </form>
 </div>
@@ -364,7 +378,8 @@ eof
 #appends bleat to collection of bleats for current user
 sub add_bleat {
 	my ($current_user, $bleat_to_send) = @_;
-	$bleat_to_send = substr($bleat_to_send, 0, 142);
+	$bleat_to_send = substr($bleat_to_send, 0, 142); #limits length of bleat
+	$bleat_to_send =~ s/\n/ /g; #converts all newlines to spaces
 
 	#finds greatest unique identifier and increments by 50
 	my @bleats = reverse(sort(glob("$bleats_dir/*")));
@@ -423,7 +438,7 @@ sub user_bleats {
 		if (grep(/^$bleat$/, @user_bleats)) {
 			my $bleat_file = "$bleats_dir/$bleat";
 			open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
-			$bleats_to_display .= "<div class='bleat_block'>\n";
+			$bleats_to_display .= "<div class=\"bleat_block\">\n";
 			my ($reply, $time, $latitude, $longitude) = "";
 
 			#extracts information about the bleat
@@ -509,21 +524,23 @@ sub add_relevant_bleats {
 
 #computes and displays search results
 sub display_search_results {
-	my $search_term = $_[0];
+	my ($search_term, $search_type) = ($_[0], $_[1]);
 	my $search = $search_term;
-	$search =~ s/\s{2,}/ /g; #condenses whitespace
+	$search =~ s/\s{2,}/ /g; #condenses whitespace	
+	$search_term = encode_output($search_term);
 
-	#aborts if user did not enter a search phrase 
+	#aborts if user did not enter a valid search phrase 
 	if (length($search) == 0 || $search eq " ") {
 		print "Please enter a search phrase first.\n";
 		return;
 	}
 
-	$search =~ s/\.\.//g; #sanitises search phrase
-	my @users = glob("$users_dir/*");
+	my @users = my @bleats = ();
+	@users = glob("$users_dir/*") if $search_type ne "bleats";
+	@bleats = glob("$bleats_dir/*") if $search_type ne "users";
 	my $i = 0;
 
-	#checks whether requested user exists
+	#finds all users matching $search
 	for $user (@users) {
 
 		if ($user =~ /$search/i) {
@@ -537,47 +554,69 @@ sub display_search_results {
 			}
 
 			close USER;
-			$matches{$user} = $full_name;
+			$users{$user} = $full_name;
 			$i++;
 		} else {
 			#matches user with given full name
 			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 			foreach $line (<USER>) {
-				if ($line =~ /^full_name: (.*$search.*)/i) {
-					$matches{$user} = $1;
-					$i++;
-				}
+				$users{$user} = $1 and $i++ if $line =~ /^full_name: (.*$search.*)/i;
 			}
 			close USER;
 		}
 
 	}
 
-	$search_term = encode_output($search_term);
+	#finds all bleats matching $search
+	for $bleat (@bleats) {
+		open BLEAT, $bleat or die "Cannot open $bleat: $!";
 
-	#dispays username and full name of matches or message that no results were found
+		#extracts username of bleater and bleat message
+		while (<BLEAT>) {
+			$username = $1 if $_ =~ /^username: (.+)/;
+			$bleat_msg = $1 if $_ =~ /^bleat: (.+)/;
+		}
+
+		close BLEAT;
+		$bleats{$username} .= "$bleat_msg<br>\n" and $i++ if $bleat_msg =~ /$search/i;
+	}
+
+	#dispays results which matched $search or a message that no results were found
 	if ($i eq 0) {
 		print "No search results found for \"$search_term\"\n";
 	} else {
-		print "<b>Found $i search results for \"$search_term\":</b>\n<p>\n";
-
-		#prints a form for each match, displaying usernames and full names
-		foreach $key (sort(keys %matches)) {
-			print "<i>$matches{$key}</i>\n<br>\n";
-			$key =~ s/$users_dir\///;
-			print <<eof;
-<form method="GET" action="">
-  Username: <input type="submit" name="view_profile" value="$key" class="bitter_link">
-  <input type="hidden" name="profile_to_view" value="$users_dir/$key">
-</form>
-<p>
-<br>
-eof
-		}
-
+		print "<b>Found $i search results for \"$search_term\":</b>\n";
+		generate_search_results("Username", %users) if $search_type ne "bleats";
+		generate_search_results("Bleated by", %bleats) if $search_type ne "users";
 	}
 
+}
+
+#formats search results in human-readable form with links to relevant user page
+sub generate_search_results {
+	my ($type_of_match, %matches) = @_;
+	print "<table>";
+
+	#prints a form for each match, displaying match and link to profile
+	foreach $key (sort(keys %matches)) {
+		print <<eof;
+<tr><td>
+<i>$matches{$key}</i>
+eof
+
+		$key =~ s/$users_dir\///;
+		print <<eof;
+<form method="GET" action="">
+  $type_of_match: <input type="submit" name="view_profile" value="$key" class="bitter_link">
+  <input type="hidden" name="profile_to_view" value="$users_dir/$key">
+</form>
+<br>
+</td></tr>
+eof
+	}
+
+	print "</table>\n";
 }
 
 #toggles listening/unlistening to specified user
