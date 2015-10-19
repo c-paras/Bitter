@@ -87,9 +87,13 @@ if (defined $token) {
 			display_page_banner(param('search_phrase'), param('search_type'));
 			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('bleat_to_send')) {
-			add_bleat($current_user[0], param('bleat_to_send'), param('in_reply_to'));
+			add_bleat($current_user[0], param('bleat_to_send'));
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
+		} elsif (defined param('reply_bleat')) {
+			add_bleat($current_user[0], param('reply_bleat'), param('in_reply_to'));
+			display_page_banner();
+			display_user_profile(param('profile_in_view'));
 		} elsif (defined param('profile_to_view')) {
 			display_page_banner();
 			display_user_profile(param('profile_to_view'));
@@ -335,7 +339,6 @@ sub bleat_block {
   <textarea name="bleat_to_send" id="bleat_to_send" style="width: 100%; resize: none; height: 200px;">
 </textarea>
   <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
-  <input type="hidden" name="in_reply_to" id="in_reply_to">
 </form>
 </div>
 <script type="text/javascript">
@@ -358,7 +361,7 @@ sub listen_option {
 
 	#finds listens of current user
 	while (<USER>) {
-		$listens = $1 && last if $_ =~ /^listens: (.+)/;
+		$listens = $1 if $_ =~ /^listens: (.+)/;
 	}
 
 	close USER;
@@ -375,7 +378,8 @@ eof
 
 #appends bleat to collection of bleats for current user
 sub add_bleat {
-	my ($current_user, $bleat_to_send, $in_reply_to) = @_;
+	my ($current_user, $bleat_to_send) = ($_[0], $_[1]);
+	$in_reply_to = $_[2] || '';
 	$bleat_to_send = substr($bleat_to_send, 0, 142); #limits length of bleat
 	$bleat_to_send =~ s/\n/ /g; #converts all newlines to spaces
 
@@ -492,13 +496,19 @@ sub user_bleats {
 
 	#appends javascript to allow the user to type a reply to a bleat using a prompt
 	$bleats_to_display .= <<eof;
+<form id="reply_to_a_bleat" method="POST" action="">
+  <input type="hidden" name="reply_bleat" id="reply_bleat">
+  <input type="hidden" name="in_reply_to" id="in_reply_to">
+  <input type="hidden" name="profile_in_view" value="$users_dir/$user">
+</form>
+
 <script type="text/javascript">
   function reply_field(bleat_id) {
     var msg = prompt("Enter reply:");
     if (msg.match(/^\\s*\$/) === null) {
-      document.getElementById("bleat_to_send").value = msg;
+      document.getElementById("reply_bleat").value = msg;
       document.getElementById("in_reply_to").value = bleat_id;
-      document.getElementById("send_bleat").click();
+      document.getElementById("reply_to_a_bleat").submit();
     }
   }
 </script>
@@ -577,7 +587,7 @@ sub display_search_results {
 
 			#obtains full name of user
 			foreach $line (<USER>) {
-				$full_name = $1 && last if ($line =~ /^full_name: (.+)/i);
+				$full_name = $1 and last if ($line =~ /^full_name: (.+)/i);
 			}
 
 			close USER;
@@ -588,7 +598,7 @@ sub display_search_results {
 			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 			foreach $line (<USER>) {
-				$users{$user} = $1 && $i++ if $line =~ /^full_name: (.*$search.*)/i;
+				$users{$user} = $1 and $i++ if $line =~ /^full_name: (.*$search.*)/i;
 			}
 			close USER;
 		}
@@ -606,7 +616,7 @@ sub display_search_results {
 		}
 
 		close BLEAT;
-		$bleats{$username} .= "$bleat_msg<br>\n" && $i++ if index(lc $bleat_msg, lc $search) != -1;
+		$bleats{$username} .= "$bleat_msg<br>\n" and $i++ if index(lc $bleat_msg, lc $search) != -1;
 	}
 
 	#dispays results which matched $search or a message that no results were found
@@ -635,7 +645,7 @@ eof
 
 		$key =~ s/$users_dir\///;
 		print <<eof;
-<form method="GET" action="">
+<form method="POST" action="">
   $type_of_match: <input type="submit" name="view_profile" value="$key" class="bitter_link">
   <input type="hidden" name="profile_to_view" value="$users_dir/$key">
 </form>
