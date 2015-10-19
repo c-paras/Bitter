@@ -294,7 +294,6 @@ sub user_details {
 	my $listen_option = $_[2] || '';
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = "Unkown";
-	$listens = "None";
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
@@ -309,7 +308,7 @@ sub user_details {
 			$listens = "";
 			$listens = $1 if $line =~ /^listens: (.+)/;
 			$listens =~ s/\s{2,}/ /g; #condenses whitespace
-			$listens = "None" if $listens eq "";
+			$listens = "None" if $listens =~ /^\s*$/;
 			$listens_to_display = $listens;
 			$listens_to_display =~ s/ /\n/g; #displays listens as vertical list
 		}
@@ -332,23 +331,30 @@ sub user_details {
 <b>Listens:</b> $listens_to_display
 eof
 
-	$details .= listen_option($user, $listen_option, "profile")."</form>\n" if $listen_option ne "";
+	#appends option to listen/unlisten user iff profile being viewed is not the user's
+	if ($listen_option ne "") {
+		$details .= listen_option($user, $listen_option, "profile")."</form>";
+	} else {
+		$details .= "\n";
+	}
 
-	$details .= "\n</div>\n";
+	$details .= "</div>\n";
 	return $details;
 }
 
 #provides interface for sending new bleats
 sub bleat_block {
+	#ensures same page is reloaded when bleat is sent
+	my $display_offset = param('num_displayed') || 0;
+	$display_offset += 1 if $display_offset != 0;
+
 	return <<eof;
 </td><tr><td>
 <div class="bleat_block">
-<b>Send a new bleat:</b>
-<form id="bleat_form" method="POST" action="">
-  <textarea name="bleat_to_send" id="bleat_to_send" onkeydown="auto_submit(event);" style="width: 100%; height: 200px; resize: none;">
-</textarea>
-  <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
-</form>
+<b>Send a new bleat:</b><form id="bleat_form" method="POST" action="">
+<textarea name="bleat_to_send" id="bleat_to_send" onkeydown="auto_submit(event);" style="width: 90%; height: 200px; resize: none;"></textarea>
+<input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
+<input type="hidden" name="num_displayed" value="$display_offset"></form>
 </div>
 
 <script type="text/javascript">
@@ -387,11 +393,15 @@ sub listen_option {
 	$type = "Unlisten" if grep(/$user/, $listens);
 	$type = "Listen to" if !grep(/$user/, $listens);
 
+	#approximates current page for next viewing
+	my $display_offset = param('num_displayed') || 0;
+
 	return <<eof;
 
 <form method="POST" action="" style="margin-bottom: 0px;">
   <input type="submit" name="listen" value="$type $user" class="bitter_button">
   <input type="hidden" name="previous_page" value="$current_page">
+  <input type="hidden" name="num_displayed" value="$display_offset">
 eof
 }
 
@@ -500,9 +510,9 @@ sub user_bleats {
 
 		#appends rest of info about bleat to string
 		$bleats_to_display .= "<br>\n";
-		$bleats_to_display .= "<b>Posted:</b> ".scalar localtime($time)."\n" if $time;
-		$bleats_to_display .= "<b>Latitude:</b> $latitude\n" if $latitude;
-		$bleats_to_display .= "<b>Longitude:</b> $longitude\n" if $longitude;
+		$bleats_to_display .= "<b>Posted:</b> ".scalar localtime($time) if $time;
+		$bleats_to_display .= "\n<b>Latitude:</b> $latitude\n" if $latitude;
+		$bleats_to_display .= "<b>Longitude:</b> $longitude" if $longitude;
 		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 		$current_user[0] = param('username') if !$current_user[0];
 
@@ -515,10 +525,20 @@ sub user_bleats {
 		if ($bleater ne $current_user[0]) {
 			$bleats_to_display .= '<form method="POST" action="">'."\n" if $user ne $current_user[0];
 			$bleats_to_display .= reply_to_bleat($bleater, $bleat);
+		} else {
+			$bleats_to_display .= "<br>\n";
 		}
 
-		$bleats_to_display .= "\n</div>\n<p>\n";
+		$bleats_to_display .= "</div>\n<p>\n";
 	}
+
+	#ensures same page is viewed if reply is made
+	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+	$current_user[0] = param('username') if !$current_user[0];
+	$display_offset = $display_up_to - 15 if $user eq $current_user[0];
+	$display_offset = 0 if $user eq $current_user[0] && $display_up_to == 16;
+	$display_offset = $display_up_to - 16 if $user ne $current_user[0];
+	$display_offset = 0 if $display_offset < 0;
 
 	#appends form and javascript to allow the user to type a reply to a bleat using a prompt
 	$bleats_to_display .= <<eof;
@@ -526,6 +546,7 @@ sub user_bleats {
 <form id="reply_to_a_bleat" method="POST" action="">
   <input type="hidden" name="reply_bleat" id="reply_bleat">
   <input type="hidden" name="in_reply_to" id="in_reply_to">
+  <input type="hidden" name="num_displayed" value="$display_offset">
   <input type="hidden" name="profile_in_view" value="$users_dir/$user">
 </form>
 
