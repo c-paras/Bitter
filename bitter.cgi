@@ -99,6 +99,9 @@ if (defined $token) {
 			display_user_profile(param('profile_to_view'));
 		} elsif (defined param('listen')) {
 			listen_to_user(param('listen'), $current_user[0], param('previous_page'));
+		} elsif (defined param('next')) {
+			display_page_banner();
+			display_user_profile(param('profile_in_view'));
 		} else {
 			display_login_page();
 		}
@@ -342,7 +345,7 @@ sub bleat_block {
 <div class="bleat_block">
 <b>Send a new bleat:</b>
 <form id="bleat_form" method="POST" action="">
-  <textarea name="bleat_to_send" id="bleat_to_send" style="width: 100%; resize: none; height: 200px;">
+  <textarea name="bleat_to_send" id="bleat_to_send" onkeydown="auto_submit(event);" style="width: 100%; height: 200px; resize: none;">
 </textarea>
   <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
 </form>
@@ -352,6 +355,13 @@ sub bleat_block {
   function create_bleat() {
     var user_text = document.getElementById("bleat_to_send").value;
     if (user_text.match(/^\\s*\$/) === null) {
+      document.getElementById("bleat_form").submit();
+    }
+  }
+
+  function auto_submit(e) {
+    var user_text = document.getElementById("bleat_to_send").value;
+    if (e.keyCode === 13 && user_text.match(/^\\s*\$/) === null) {
       document.getElementById("bleat_form").submit();
     }
   }
@@ -390,7 +400,7 @@ sub add_bleat {
 	my ($current_user, $bleat_to_send) = ($_[0], $_[1]);
 	$in_reply_to = $_[2] || '';
 	$bleat_to_send = substr($bleat_to_send, 0, 142); #limits length of bleat
-	$bleat_to_send =~ s/\n/ /g; #converts all newlines to spaces
+	$bleat_to_send =~ s/\s{2,}/ /g; #condenses whitespace
 
 	#finds greatest unique identifier and increments by 50
 	my @bleats = reverse(sort(glob("$bleats_dir/*")));
@@ -420,14 +430,14 @@ eof
 sub user_bleats {
 	my $bleats_filename = $_[0];
 	my $show_relevant = $_[1] || '';
+	my $displayed_up_to = param('num_displayed') || 0;
+	my $display_up_to = $displayed_up_to + 16; #displays next 16 results
 
 	#obtains list of user's bleats
 	return if $bleats_filename =~ /None\/bleats.txt$/;
 	open BLEATS, "<", $bleats_filename or die "Cannot open $bleats_filename: $!";
 	push @user_bleats, <BLEATS>;
 	close BLEATS;
-
-	my @bleats = reverse(sort(glob("$bleats_dir/*")));
 
 	#returns bleats of user listened to by logged in user
 	if ($show_relevant eq "-supress_recursion") {
@@ -441,69 +451,76 @@ sub user_bleats {
 	my $user = $bleats_filename;
 	add_relevant_bleats($user, @bleats) if $show_relevant ne '';
 	my $bleats_to_display = "";
+	@user_bleats = reverse(sort(@user_bleats)); #reverse chronologically sorts bleats
 
-	#examines all available bleats
-	foreach $bleat (@bleats) {
+	#appends user's bleats to string in formatted way
+	for $i ($displayed_up_to..$display_up_to - 1) {
+
+		#obtains and reads relevant bleat
+		my $bleat = $user_bleats[$i % $#user_bleats]; #wraps to start of bleats
 		$bleat =~ s/\D//g;
+		my $bleat_file = "$bleats_dir/$bleat";
+		open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
 
-		#adds only user's relevant bleats to string
-		if (grep(/^$bleat$/, @user_bleats)) {
-			my $bleat_file = "$bleats_dir/$bleat";
-			open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
-			$bleats_to_display .= "<div class=\"bleat_block\">\n";
-			my ($reply, $time, $latitude, $longitude) = "";
+		$bleats_to_display .= "<div class=\"bleat_block\">\n";
+		my ($reply, $time, $latitude, $longitude) = "";
 
-			#extracts information about the bleat
-			foreach $line (<BLEAT>) {
-				$bleater = $1 if $line =~ /^username: (.+)/;
-				$bleat_to_display = $1 if $line =~ /^bleat: (.+)/;
-				$time = $1 if $line =~ /^time: (.+)/;
-				$reply = $1 if $line =~ /^in_reply_to: (.+)/;
-				$latitude = $1 if $line =~ /^latitude: (.+)/;
-				$longitude = $1 if $line =~ /^longitude: (.+)/;
-			}
-
-			close BLEAT;
-			encode_output($bleat_to_display);
-			$bleats_to_display .= "<b>$bleater</b> bleated <i>$bleat_to_display</i>";
-
-			#provides info about original bleat if applicable
-			if ($reply ne "") {
-				my $bleat_file = "$bleats_dir/$reply";
-				open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
-				my $bleater = "";
-
-				#extracts information about the original bleat
-				foreach $line (<BLEAT>) {
-					$bleater = $1 if $line =~ /^username: (.+)/;
-					$bleated = $1 if $line =~ /^bleat: (.+)/;
-				}
-
-				encode_output($bleated);
-				$bleats_to_display .= " in response to a bleat by <b>$bleater</b>: <i>$bleated</i>";
-				close BLEAT;
-			}
-
-			#appends rest of info about bleat to string
-			$bleats_to_display .= "<br>\n";
-			$bleats_to_display .= "<b>Posted:</b> ".scalar localtime($time)."\n" if $time;
-			$bleats_to_display .= "<b>Latitude:</b> $latitude\n" if $latitude;
-			$bleats_to_display .= "<b>Longitude:</b> $longitude\n" if $longitude;
-			my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-			$current_user[0] = param('username') if !$current_user[0];
-			if ($user eq $current_user[0] && $bleater ne $current_user[0]) {
-				$bleats_to_display .= listen_option($bleater, $current_user[0], "home");
-			}
-			if ($bleater ne $current_user[0]) {
-				$bleats_to_display .= '<form method="POST" action="">'."\n" if $user ne $current_user[0];
-				$bleats_to_display .= reply_to_bleat($bleater, $bleat);
-			}
-			$bleats_to_display .= "\n</div>\n<p>\n";
+		#extracts information about the bleat
+		foreach $line (<BLEAT>) {
+			$bleater = $1 if $line =~ /^username: (.+)/;
+			$bleat_to_display = $1 if $line =~ /^bleat: (.+)/;
+			$time = $1 if $line =~ /^time: (.+)/;
+			$reply = $1 if $line =~ /^in_reply_to: (.+)/;
+			$latitude = $1 if $line =~ /^latitude: (.+)/;
+			$longitude = $1 if $line =~ /^longitude: (.+)/;
 		}
 
+		close BLEAT;
+		encode_output($bleat_to_display);
+		$bleat_to_display =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
+		$bleats_to_display .= "<b>$bleater</b> bleated <i>$bleat_to_display</i>";
+
+		#provides info about original bleat if applicable
+		if ($reply ne "") {
+			my $bleat_file = "$bleats_dir/$reply";
+			open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
+			my $bleater = "";
+
+			#extracts information about the original bleat
+			foreach $line (<BLEAT>) {
+				$bleater = $1 if $line =~ /^username: (.+)/;
+				$bleated = $1 if $line =~ /^bleat: (.+)/;
+			}
+
+			encode_output($bleated);
+			$bleated =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
+			$bleats_to_display .= " in response to a bleat by <b>$bleater</b>: <i>$bleated</i>";
+			close BLEAT;
+		}
+
+		#appends rest of info about bleat to string
+		$bleats_to_display .= "<br>\n";
+		$bleats_to_display .= "<b>Posted:</b> ".scalar localtime($time)."\n" if $time;
+		$bleats_to_display .= "<b>Latitude:</b> $latitude\n" if $latitude;
+		$bleats_to_display .= "<b>Longitude:</b> $longitude\n" if $longitude;
+		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+		$current_user[0] = param('username') if !$current_user[0];
+
+		#appends option to listen to bleater if bleater is not the current user
+		if ($user eq $current_user[0] && $bleater ne $current_user[0]) {
+			$bleats_to_display .= listen_option($bleater, $current_user[0], "home");
+		}
+
+		#appends reply field to bleats not posted by current user
+		if ($bleater ne $current_user[0]) {
+			$bleats_to_display .= '<form method="POST" action="">'."\n" if $user ne $current_user[0];
+			$bleats_to_display .= reply_to_bleat($bleater, $bleat);
+		}
+
+		$bleats_to_display .= "\n</div>\n<p>\n";
 	}
 
-	#appends javascript to allow the user to type a reply to a bleat using a prompt
+	#appends form and javascript to allow the user to type a reply to a bleat using a prompt
 	$bleats_to_display .= <<eof;
 
 <form id="reply_to_a_bleat" method="POST" action="">
@@ -525,6 +542,16 @@ sub user_bleats {
 
 eof
 
+	#appends form for viewing the next 16 bleats
+	$bleats_to_display .= <<eof;
+<div align="right">
+  <form method="POST" action="">
+    <input type="submit" name="next" value="Show more bleats" class="bitter_button">
+    <input type="hidden" name="num_displayed" value="$display_up_to">
+    <input type="hidden" name="profile_in_view" value="$users_dir/$user">
+  </form>
+</div>
+eof
 	return $bleats_to_display;
 }
 
