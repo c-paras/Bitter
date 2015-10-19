@@ -188,6 +188,7 @@ sub display_login_page {
     <input type="submit" name="reset" value="Reset password" class="bitter_button">
   </form>
 </center>
+
 eof
 }
 
@@ -235,6 +236,7 @@ eof
       </td>
     </tr>
   </table>
+
   <script type="text/javascript">
     function perform_search(e) {
         if (e.keyCode === 13) {
@@ -242,6 +244,7 @@ eof
         }
     }
   </script>
+
 </form>
 <p>
 eof
@@ -292,24 +295,27 @@ sub user_details {
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
-		if ($line =~ /^full_name: (.+)/) {
-			$name = $1;
-		} elsif ($line =~ /^username: (.+)/) {
-			$user = $1;
-		} elsif ($line =~ /^home_suburb: (.+)/) {
-			$location = $1;
-		} elsif ($line =~ /^home_latitude: (.+)/) {
-			$latitude = $1;
-		} elsif ($line =~ /^home_longitude: (.+)/) {
-			$longitude = $1;
-		} elsif ($line =~ /^listens: (.+)/) {
-			$listens = $1;
+		$name = $1 if $line =~ /^full_name: (.+)/;
+		$user = $1 if $line =~ /^username: (.+)/;
+		$location = $1 if $line =~ /^home_suburb: (.+)/;	
+		$latitude = $1 if $line =~ /^home_latitude: (.+)/;
+		$longitude = $1 if $line =~ /^home_longitude: (.+)/;
+
+		#captures listens of user if they exist
+		if ($line =~ /^listens:/) {
+			$listens = "";
+			$listens = $1 if $line =~ /^listens: (.+)/;
 			$listens =~ s/\s{2,}/ /g; #condenses whitespace
-			$listens = "None" if $listens eq " ";
+			$listens = "None" if $listens eq "";
+			$listens_to_display = $listens;
+			$listens_to_display =~ s/ /\n/g; #displays listens as vertical list
 		}
+
 	}
 
 	close DETAILS;
+
+	#appends user details to profile box
 	my $details = <<eof;
 <div class="bitter_block">
   <b><font size="10">$name</font></b>
@@ -320,7 +326,7 @@ sub user_details {
 <b>Suburb:</b> $location
 <b>Home Latitude:</b> $latitude
 <b>Home Longitude:</b> $longitude
-<b>Listens:</b> $listens
+<b>Listens:</b> $listens_to_display
 eof
 
 	$details .= listen_option($user, $listen_option, "profile")."</form>\n" if $listen_option ne "";
@@ -341,6 +347,7 @@ sub bleat_block {
   <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
 </form>
 </div>
+
 <script type="text/javascript">
   function create_bleat() {
     var user_text = document.getElementById("bleat_to_send").value;
@@ -349,6 +356,7 @@ sub bleat_block {
     }
   }
 </script>
+
 eof
 }
 
@@ -357,7 +365,7 @@ sub listen_option {
 	my ($user, $current_user, $current_page) = @_;
 	my $user_profile = "$users_dir/$current_user/details.txt";
 	my $listens = "";
-	open USER, "<", "$user_profile" or die "Cannot open $user_profile: $!";
+	open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
 
 	#finds listens of current user
 	while (<USER>) {
@@ -370,6 +378,7 @@ sub listen_option {
 	$type = "Listen to" if !grep(/$user/, $listens);
 
 	return <<eof;
+
 <form method="POST" action="" style="margin-bottom: 0px;">
   <input type="submit" name="listen" value="$type $user" class="bitter_button">
   <input type="hidden" name="previous_page" value="$current_page">
@@ -397,7 +406,7 @@ sub add_bleat {
 	#adds bleat to bleats collection
 	my $unix_time = time();
 	my $bleat_file = "$bleats_dir/$bleats[0]";
-	open BLEAT, ">", "$bleat_file" or die "Cannot write $bleat_file: $!";
+	open BLEAT, ">", $bleat_file or die "Cannot write $bleat_file: $!";
 	print BLEAT <<eof;
 username: $current_user
 bleat: $bleat_to_send
@@ -496,6 +505,7 @@ sub user_bleats {
 
 	#appends javascript to allow the user to type a reply to a bleat using a prompt
 	$bleats_to_display .= <<eof;
+
 <form id="reply_to_a_bleat" method="POST" action="">
   <input type="hidden" name="reply_bleat" id="reply_bleat">
   <input type="hidden" name="in_reply_to" id="in_reply_to">
@@ -512,6 +522,7 @@ sub user_bleats {
     }
   }
 </script>
+
 eof
 
 	return $bleats_to_display;
@@ -531,7 +542,7 @@ sub add_relevant_bleats {
 		#checks whether bleat mentions user
 		my $mentioned = 0;
 		while (<BLEAT>) {
-			$mentioned = 1 && last if $_ =~ /^bleat:.*$username.*/;
+			$mentioned = 1 if $_ =~ /^bleat:.*$username.*/i;
 		}
 
 		push @user_bleats, $bleat if $mentioned;
@@ -587,7 +598,7 @@ sub display_search_results {
 
 			#obtains full name of user
 			foreach $line (<USER>) {
-				$full_name = $1 and last if ($line =~ /^full_name: (.+)/i);
+				$full_name = $1 if ($line =~ /^full_name: (.+)/i);
 			}
 
 			close USER;
@@ -645,12 +656,14 @@ eof
 
 		$key =~ s/$users_dir\///;
 		print <<eof;
+
 <form method="POST" action="">
   $type_of_match: <input type="submit" name="view_profile" value="$key" class="bitter_link">
   <input type="hidden" name="profile_to_view" value="$users_dir/$key">
 </form>
 <br>
 </td></tr>
+
 eof
 	}
 
@@ -670,7 +683,7 @@ sub listen_to_user {
 
 		#removes $unlisten_to user from the listen data
 		while (<USER>) {
-			$_ =~ s/$unlisten_to//;
+			$_ =~ s/$unlisten_to//g;
 			$_ =~ s/ $//;
 			$lines[$i++] = $_;
 		}
@@ -690,7 +703,7 @@ sub listen_to_user {
 
 		#appends $listen_to user to the listen data
 		while (<USER>) {
-			if ($_ =~ /^(listens: .+)/) {
+			if ($_ =~ /^(listens:.*)/) {
 				my $current_listens = $1;
 				$current_listens .= " $listen_to\n";
 				$lines[$i++] = $current_listens;
@@ -726,6 +739,7 @@ Set-cookie: user=$user; HttpOnly
   <link href="bitter.css" rel="stylesheet">
 </head>
 <body>
+
 eof
 	warningsToBrowser(1) if $debug; #enables warnings as html comments
 }

@@ -12,4 +12,4 @@ Date		Time		Activity	Description
 18/10/2015	14:00-16:30	coding		added searching feature for bleats, fixed bugs with bleat box
 18/10/2015	17:00-18:15	coding		implemented responding to bleats
 18/10/2015	18:30-20:40	debugging	fixed current_user, searching and bleating bugs, layout issues and major security holes in searching
-19/10/2015	13:00-14:00	debugging	fixed replying to bug on profile page
+19/10/2015	13:00-15:00	debugging	fixed replying to bug on profile page and listens bug
