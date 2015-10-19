@@ -358,10 +358,7 @@ sub listen_option {
 
 	#finds listens of current user
 	while (<USER>) {
-		if ($_ =~ /^listens: (.+)/) {
-			$listens = $1;
-			last;
-		}
+		$listens = $1 && last if $_ =~ /^listens: (.+)/;
 	}
 
 	close USER;
@@ -524,7 +521,7 @@ sub add_relevant_bleats {
 		#checks whether bleat mentions user
 		my $mentioned = 0;
 		while (<BLEAT>) {
-			$mentioned = 1 if $_ =~ /^bleat:.*$username.*/;
+			$mentioned = 1 && last if $_ =~ /^bleat:.*$username.*/;
 		}
 
 		push @user_bleats, $bleat if $mentioned;
@@ -580,7 +577,7 @@ sub display_search_results {
 
 			#obtains full name of user
 			foreach $line (<USER>) {
-				$full_name = $1 if ($line =~ /^full_name: (.+)/i);
+				$full_name = $1 && last if ($line =~ /^full_name: (.+)/i);
 			}
 
 			close USER;
@@ -591,7 +588,7 @@ sub display_search_results {
 			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 			foreach $line (<USER>) {
-				$users{$user} = $1 and $i++ if $line =~ /^full_name: (.*$search.*)/i;
+				$users{$user} = $1 && $i++ if $line =~ /^full_name: (.*$search.*)/i;
 			}
 			close USER;
 		}
@@ -609,7 +606,7 @@ sub display_search_results {
 		}
 
 		close BLEAT;
-		$bleats{$username} .= "$bleat_msg<br>\n" and $i++ if index(lc $bleat_msg, lc $search) != -1;
+		$bleats{$username} .= "$bleat_msg<br>\n" && $i++ if index(lc $bleat_msg, lc $search) != -1;
 	}
 
 	#dispays results which matched $search or a message that no results were found
