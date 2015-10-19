@@ -207,7 +207,7 @@ eof
 #prints html for the bitter navigation banner
 sub display_page_banner {
 	my $search_phrase = $_[0] || '';
-	$search_phrase = encode_output($search_phrase);
+	encode_output($search_phrase);
 	my $type = $_[1] || '';
 	print <<eof;
 <form method="GET" action="">
@@ -464,7 +464,7 @@ sub user_bleats {
 			}
 
 			close BLEAT;
-			$bleat_to_display = encode_output($bleat_to_display);
+			encode_output($bleat_to_display);
 			$bleats_to_display .= "<b>$bleater</b> bleated <i>$bleat_to_display</i>";
 
 			#provides info about original bleat if applicable
@@ -479,7 +479,7 @@ sub user_bleats {
 					$bleated = $1 if $line =~ /^bleat: (.+)/;
 				}
 
-				$bleated = encode_output($bleated);
+				encode_output($bleated);
 				$bleats_to_display .= " in response to a bleat by <b>$bleater</b>: <i>$bleated</i>";
 				close BLEAT;
 			}
@@ -573,9 +573,9 @@ eof
 sub display_search_results {
 	my ($search_term, $search_type) = ($_[0], $_[1]);
 	$search_term =~ s/\s{2,}/ /g; #condenses whitespace
-	$search_term =~ s/(\||\\|\.|\/)//g; #sanitises search phrase
+	$search_term =~ s/(\||\\|\.\.|\/)//g; #sanitises search phrase
 	my $search = $search_term;
-	$search_term = encode_output($search_term);
+	encode_output($search_term);
 
 	#aborts if user did not enter a valid search phrase 
 	if (length($search) == 0 || $search eq " ") {
@@ -609,7 +609,7 @@ sub display_search_results {
 			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 			foreach $line (<USER>) {
-				$users{$user} = $1 and $i++ if $line =~ /^full_name: (.*$search.*)/i;
+				$users{$user} = $1 and $i++ if $line =~ /^full_name: (.*\Q$search\E.*)/i;
 			}
 			close USER;
 		}
@@ -754,7 +754,7 @@ sub print_page_trailer {
 		#prints param='value' for each parameter
 		foreach $param (param()) {
 			my $value = param($param);
-			$input = encode_output($input);
+			encode_output($value);
 			print "$param='$value' ";
 		}
 
@@ -768,12 +768,9 @@ eof
 }
 
 #sanitises a given output string by escaping html metacharacters
-sub encode_output {
-	$input = $_[0] || '';
-	$input =~ s/\&/&amp;/g;
-	$input =~ s/\'/&apos;/g;
-	$input =~ s/\"/&quot;/g;
-	$input =~ s/\</&lt;/g;
-	$input =~ s/\>/&gt;/g;
-	return $input;
+sub encode_output(\$) {
+	$_[0] =~ s/\&/&amp;/g;
+	$_[0] =~ s/\"/&quot;/g;
+	$_[0] =~ s/\</&lt;/g;
+	$_[0] =~ s/\>/&gt;/g;
 }
