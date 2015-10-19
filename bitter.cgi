@@ -171,7 +171,7 @@ sub display_login_page {
 	#omits heading if function is called with a parameter
 	my %supress_heading = @_;
 	if (!%supress_heading) {
-		print '<div class="bitter_heading">Welcome to Bitter</div>';
+		print '<div class="bitter_heading">Welcome to Bitter</div>', "\n";
 	}
 
 	print <<eof;
@@ -736,7 +736,7 @@ Set-cookie: user=$user; HttpOnly
 <!DOCTYPE html>
 <head>
   <title>Bitter</title>
-  <link href="bitter.css" rel="stylesheet">
+  <link href="bitter.css" rel="stylesheet" type="text/css">
 </head>
 <body>
 
