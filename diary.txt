@@ -14,4 +14,4 @@ Date		Time		Activity	Description
 18/10/2015	18:30-20:40	debugging	fixed current_user, searching and bleating bugs, layout issues and major security holes in searching
 19/10/2015	13:00-15:00	debugging	fixed replying to bug on profile page and listens bug
 19/10/2015	17:00-18:20	coding		improved output sanitisation, tidied up html
-19/10/2015	19:00-22:00	coding		implemented pagination for bleats only and fixed newlines in bleats issue, improved page layout
+19/10/2015	19:00-22:10	coding		implemented pagination for bleats only and fixed newlines in bleats issue, improved page layout, fixed major searching bug

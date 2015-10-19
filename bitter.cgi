@@ -638,8 +638,10 @@ sub display_search_results {
 
 	#finds all users matching $search
 	for $user (@users) {
+		my $username_to_search = $user;
+		$username_to_search =~ s/.*\///;
 
-		if (index(lc $user, lc $search) != -1) {
+		if (index(lc $username_to_search, lc $search) != -1) {
 			#matches user with given username
 			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
