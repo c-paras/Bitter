@@ -15,3 +15,5 @@ Date		Time		Activity	Description
 19/10/2015	13:00-15:00	debugging	fixed replying to bug on profile page and listens bug
 19/10/2015	17:00-18:20	coding		improved output sanitisation, tidied up html
 19/10/2015	19:00-22:10	coding		implemented pagination for bleats only and fixed newlines in bleats issue, improved page layout, fixed major searching bug
+20/10/2015	17:30-23:15	coding		improved bleating implementation, modularised and improved searching and implemented pagination for searching, fixed layout
+21/10/2015	08:30-09:50	coding		improved session id handling by using an md5 hash

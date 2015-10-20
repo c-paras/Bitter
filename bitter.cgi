@@ -3,8 +3,9 @@
 #Provides a social media platform analogous to Twitter
 #http://www.cse.unsw.edu.au/~cs2041/assignments/bitter/
 
-use CGI qw/:all/;
+use CGI qw(:all);
 use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
+use Digest::MD5 qw(md5_hex);
 
 $debug = 1;
 
@@ -14,7 +15,7 @@ $users_dir = "dataset-$dataset_size/users";
 $bleats_dir = "dataset-$dataset_size/bleats";
 
 #obtains session id token if it exists
-if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w\-]{30,})/) {
+if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w]{30,})/) {
 	$token = $1;
 	my $token_file = "tokens/$token";
 
@@ -60,7 +61,7 @@ eof
 
 #main bitter hierarchy logic
 if (defined $token) {
-	$token =~ s/[^\w\-]//g; #removes unexpected chars from token
+	$token =~ s/[^\w]//g; #removes unexpected chars from token
 	$token_file = "tokens/$token";
 
 	#checks that token is valid and has been issued within the last day
@@ -83,7 +84,7 @@ if (defined $token) {
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('settings')) {
 			print "<font color=\"red\">This page is a placeholder.</font>\n";
-		} elsif (defined param('search')) {
+		} elsif (defined param('search') || defined param('more')) {
 			display_page_banner(param('search_phrase'), param('search_type'));
 			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('bleat_to_send')) {
@@ -92,8 +93,16 @@ if (defined $token) {
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('reply_bleat')) {
 			add_bleat($current_user[0], param('reply_bleat'), param('in_reply_to'));
-			display_page_banner();
-			display_user_profile(param('profile_in_view'));
+
+			#navigates to relevant profile page or to search results page
+			if (defined param('profile_in_view')) {
+				display_page_banner();
+				display_user_profile(param('profile_in_view'));
+			} else {
+				display_page_banner(param('search_phrase'), param('search_type'));
+				display_search_results(param('search_phrase'), param('search_type'));
+			}
+
 		} elsif (defined param('profile_to_view')) {
 			display_page_banner();
 			display_user_profile(param('profile_to_view'));
@@ -120,8 +129,8 @@ eof
 
 } elsif (defined param('login')) {
 		if (authenticate_user(param('username'), param('password'))) {
-			#generates unique 64-bit uuid
-			$token = `uuidgen`;
+			#generates unique session id
+			$token = md5_hex(time() + $$);
 			chomp $token;
 
 			#stores token in direcotry
@@ -213,7 +222,7 @@ sub display_page_banner {
 	encode_output($search_phrase);
 	my $type = $_[1] || '';
 	print <<eof;
-<form method="GET" action="">
+<form method="POST" action="">
   <table>
     <tr>
       <td>
@@ -224,13 +233,11 @@ sub display_page_banner {
         <select name="search_type" class="bitter_button">
 eof
 
-	#prints search options with default value == that which was selected
+	#prints search options with default value == that which was last selected
 	print "<option value=\"users\" selected>Users</option>\n" if $type eq "users";
 	print "<option value=\"users\">Users</option>\n" if $type ne "users";
 	print "<option value=\"bleats\" selected>Bleats</option>\n" if $type eq "bleats";
 	print "<option value=\"bleats\">Bleats</option>\n" if $type ne "bleats";
-	print "<option value=\"all\" selected>All</option>\n" if $type eq "all";
-	print "<option value=\"all\">All</option>\n" if $type ne "all";
 
 	print <<eof;
         </select>
@@ -318,7 +325,7 @@ sub user_details {
 	close DETAILS;
 
 	#appends user details to profile box
-	my $details = <<eof;
+	return <<eof;
 <div class="bitter_block">
   <b><font size="10">$name</font></b>
 
@@ -329,17 +336,9 @@ sub user_details {
 <b>Home Latitude:</b> $latitude
 <b>Home Longitude:</b> $longitude
 <b>Listens:</b> $listens_to_display
+
+</div>
 eof
-
-	#appends option to listen/unlisten user iff profile being viewed is not the user's
-	if ($listen_option ne "") {
-		$details .= listen_option($user, $listen_option, "profile")."</form>";
-	} else {
-		$details .= "\n";
-	}
-
-	$details .= "</div>\n";
-	return $details;
 }
 
 #provides interface for sending new bleats
@@ -352,7 +351,7 @@ sub bleat_block {
 </td><tr><td>
 <div class="bleat_block">
 <b>Send a new bleat:</b><form id="bleat_form" method="POST" action="">
-<textarea name="bleat_to_send" id="bleat_to_send" onkeydown="auto_submit(event);" style="width: 90%; height: 200px; resize: none;"></textarea>
+<textarea name="bleat_to_send" id="bleat_to_send" onkeydown="auto_submit(event);" style="width: 100%; height: 200px; resize: none;"></textarea>
 <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
 <input type="hidden" name="num_displayed" value="$display_offset"></form>
 </div>
@@ -376,9 +375,9 @@ sub bleat_block {
 eof
 }
 
-#provides option for listening/unlistening user
-sub listen_option {
-	my ($user, $current_user, $current_page) = @_;
+#provides option buttons for replying to a bleat and listening/unlistening user
+sub append_options {
+	my ($bleater, $bleat_id, $current_user, $user_being_viewed) = @_;
 	my $user_profile = "$users_dir/$current_user/details.txt";
 	my $listens = "";
 	open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
@@ -390,19 +389,32 @@ sub listen_option {
 
 	close USER;
 
-	$type = "Unlisten" if grep(/$user/, $listens);
-	$type = "Listen to" if !grep(/$user/, $listens);
+	$type = "Unlisten" if grep(/$bleater/, $listens);
+	$type = "Listen to" if !grep(/$bleater/, $listens);
 
 	#approximates current page for next viewing
 	my $display_offset = param('num_displayed') || 0;
 
-	return <<eof;
+	#determines whether current user's profile is being viewed
+	$current_page = "home" if $current_user eq $user_being_viewed;
+	$current_page = "profile" if $current_user ne $user_being_viewed;
 
-<form method="POST" action="" style="margin-bottom: 0px;">
-  <input type="submit" name="listen" value="$type $user" class="bitter_button">
-  <input type="hidden" name="previous_page" value="$current_page">
-  <input type="hidden" name="num_displayed" value="$display_offset">
+	#constructs form with reply button, listen button and relevant hidden fields
+	my $form_to_return = <<eof;
+
+<input type="button" name="reply" value="Reply to $bleater" onclick="reply_field($bleat_id);" class="bitter_button"> <input type="submit" name="listen" value="$type $bleater" class="bitter_button"><input type="hidden" name="previous_page" value="$current_page">
+<input type="hidden" name="num_displayed" value="$display_offset">
 eof
+
+	#appends search info to form if available
+	if (defined $search_term) {
+		$form_to_return .= <<eof;
+<input type="hidden" name="search_phrase" value="$search_term">
+<input type="hidden" name="search_type" value="$search_type">
+eof
+	}
+
+	return $form_to_return;
 }
 
 #appends bleat to collection of bleats for current user
@@ -412,10 +424,10 @@ sub add_bleat {
 	$bleat_to_send = substr($bleat_to_send, 0, 142); #limits length of bleat
 	$bleat_to_send =~ s/\s{2,}/ /g; #condenses whitespace
 
-	#finds greatest unique identifier and increments by 50
+	#finds greatest unique identifier and increments by random number to avoid clashes
 	my @bleats = reverse(sort(glob("$bleats_dir/*")));
 	$bleats[0] =~ s/$bleats_dir\///;
-	$bleats[0] += 50;
+	$bleats[0] += int(rand(200) + 1);
 
 	#adds bleat identifier to user record
 	my $user_bleats = "$users_dir/$current_user/bleats.txt";
@@ -434,14 +446,24 @@ time: $unix_time
 eof
 	print BLEAT "in_reply_to: $in_reply_to\n" if $in_reply_to =~ /^\d{10,}$/;
 	close BLEAT;
+
+	#prints javascript to invoke an alert, indicating that bleating was successful
+	print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Your bleat has been sent.");
+  }
+</script>
+
+eof
 }
 
 #obtains a user's bleats
 sub user_bleats {
 	my $bleats_filename = $_[0];
 	my $show_relevant = $_[1] || '';
-	my $displayed_up_to = param('num_displayed') || 0;
-	my $display_up_to = $displayed_up_to + 16; #displays next 16 results
+	$displayed_up_to = param('num_displayed') || 0;
+	$display_up_to = $displayed_up_to + 16; #displays next 16 results
 
 	#obtains list of user's bleats
 	return if $bleats_filename =~ /None\/bleats.txt$/;
@@ -460,10 +482,49 @@ sub user_bleats {
 	$bleats_filename =~ s/$users_dir\/(.+)\/bleats.txt/$1/; #extracts user
 	my $user = $bleats_filename;
 	add_relevant_bleats($user, @bleats) if $show_relevant ne '';
+	my $bleats_to_display = format_bleats($user, @user_bleats);
+
+	#ensures same page is viewed if reply is made
+	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+	$current_user[0] = param('username') if !$current_user[0];
+	$display_offset = $display_up_to - 15 if $user eq $current_user[0];
+	$display_offset = 0 if $user eq $current_user[0] && $display_up_to == 16;
+	$display_offset = $display_up_to - 16 if $user ne $current_user[0];
+	$display_offset = 0 if $display_offset < 0;
+
+	#appends form to allow the user to type a reply to a bleat using a prompt
+	$bleats_to_display .= <<eof;
+
+<form id="reply_to_a_bleat" method="POST" action="">
+  <input type="hidden" name="reply_bleat" id="reply_bleat">
+  <input type="hidden" name="in_reply_to" id="in_reply_to">
+  <input type="hidden" name="num_displayed" value="$display_offset">
+  <input type="hidden" name="profile_in_view" value="$users_dir/$user">
+</form>
+eof
+
+	#appends form for viewing the next 16 bleats
+	$bleats_to_display .= <<eof;
+<div align="right">
+  <form method="POST" action="">
+    <input type="submit" name="next" value="Show more bleats" class="bitter_button">
+    <input type="hidden" name="num_displayed" value="$display_up_to">
+    <input type="hidden" name="profile_in_view" value="$users_dir/$user">
+  </form>
+</div>
+eof
+
+	return $bleats_to_display;
+}
+
+#formats bleats to be displayed in a stylish way
+sub format_bleats {
+	my ($user, @user_bleats) = @_;
 	my $bleats_to_display = "";
 	@user_bleats = reverse(sort(@user_bleats)); #reverse chronologically sorts bleats
+	$display_up_to = $#user_bleats + 1 if $#user_bleats < 16;
 
-	#appends user's bleats to string in formatted way
+	#appends user's bleats to a string in formatted way
 	for $i ($displayed_up_to..$display_up_to - 1) {
 
 		#obtains and reads relevant bleat
@@ -487,6 +548,7 @@ sub user_bleats {
 
 		close BLEAT;
 		encode_output($bleat_to_display);
+		$bleat_to_display =~ s/\s{2,}/ /g; #condenses whitespace
 		$bleat_to_display =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
 		$bleats_to_display .= "<b>$bleater</b> bleated <i>$bleat_to_display</i>";
 
@@ -503,6 +565,7 @@ sub user_bleats {
 			}
 
 			encode_output($bleated);
+			$bleated =~ s/\s{2,}/ /g; #condenses whitespace
 			$bleated =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
 			$bleats_to_display .= " in response to a bleat by <b>$bleater</b>: <i>$bleated</i>";
 			close BLEAT;
@@ -516,39 +579,20 @@ sub user_bleats {
 		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 		$current_user[0] = param('username') if !$current_user[0];
 
-		#appends option to listen to bleater if bleater is not the current user
-		if ($user eq $current_user[0] && $bleater ne $current_user[0]) {
-			$bleats_to_display .= listen_option($bleater, $current_user[0], "home");
-		}
-
-		#appends reply field to bleats not posted by current user
+		#appends options to reply and listen/unlisten where appropriate
 		if ($bleater ne $current_user[0]) {
-			$bleats_to_display .= '<form method="POST" action="">'."\n" if $user ne $current_user[0];
-			$bleats_to_display .= reply_to_bleat($bleater, $bleat);
+			$bleats_to_display .= '<form method="POST" action="">';
+			$bleats_to_display .= append_options($bleater, $bleat, $current_user[0], $user);
+			$bleats_to_display .= "</form>";
 		} else {
-			$bleats_to_display .= "<br>\n";
+			$bleats_to_display .= "\n<br>";
 		}
 
 		$bleats_to_display .= "</div>\n<p>\n";
 	}
 
-	#ensures same page is viewed if reply is made
-	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-	$current_user[0] = param('username') if !$current_user[0];
-	$display_offset = $display_up_to - 15 if $user eq $current_user[0];
-	$display_offset = 0 if $user eq $current_user[0] && $display_up_to == 16;
-	$display_offset = $display_up_to - 16 if $user ne $current_user[0];
-	$display_offset = 0 if $display_offset < 0;
-
-	#appends form and javascript to allow the user to type a reply to a bleat using a prompt
+	#appends javascript to allow the user to type a reply to a bleat using a prompt
 	$bleats_to_display .= <<eof;
-
-<form id="reply_to_a_bleat" method="POST" action="">
-  <input type="hidden" name="reply_bleat" id="reply_bleat">
-  <input type="hidden" name="in_reply_to" id="in_reply_to">
-  <input type="hidden" name="num_displayed" value="$display_offset">
-  <input type="hidden" name="profile_in_view" value="$users_dir/$user">
-</form>
 
 <script type="text/javascript">
   function reply_field(bleat_id) {
@@ -563,16 +607,6 @@ sub user_bleats {
 
 eof
 
-	#appends form for viewing the next 16 bleats
-	$bleats_to_display .= <<eof;
-<div align="right">
-  <form method="POST" action="">
-    <input type="submit" name="next" value="Show more bleats" class="bitter_button">
-    <input type="hidden" name="num_displayed" value="$display_up_to">
-    <input type="hidden" name="profile_in_view" value="$users_dir/$user">
-  </form>
-</div>
-eof
 	return $bleats_to_display;
 }
 
@@ -608,22 +642,15 @@ sub add_relevant_bleats {
 
 }
 
-#prints user form for replying to a bleat
-sub reply_to_bleat {
-	my ($bleater, $bleat_id) = ($_[0], $_[1]);
-	return <<eof;
-  <input type="button" name="reply" value="Reply to $bleater" onclick="reply_field($bleat_id);" class="bitter_button">
-</form>
-eof
-}
-
 #computes and displays search results
 sub display_search_results {
-	my ($search_term, $search_type) = ($_[0], $_[1]);
+	($search_term, $search_type) = ($_[0], $_[1]);
 	$search_term =~ s/\s{2,}/ /g; #condenses whitespace
 	$search_term =~ s/(\||\\|\.\.|\/)//g; #sanitises search phrase
 	my $search = $search_term;
 	encode_output($search_term);
+	$displayed_up_to = param('num_displayed') || 0;
+	$display_up_to = $displayed_up_to + 16; #displays next 16 results
 
 	#aborts if user did not enter a valid search phrase 
 	if (length($search) == 0 || $search eq " ") {
@@ -631,19 +658,67 @@ sub display_search_results {
 		return;
 	}
 
-	my @users = my @bleats = ();
-	@users = glob("$users_dir/*") if $search_type ne "bleats";
-	@bleats = glob("$bleats_dir/*") if $search_type ne "users";
+	my $i = 0;
+	$i = find_user_results($search) if $search_type eq "users";
+	$i = find_bleat_results($search) if $search_type eq "bleats";
+
+	#dispays results which matched $search or a message that no results were found
+	if (@bleat_matches) {
+		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+		$current_user[0] = param('username') if !$current_user[0];
+		print "<b>Found $i bleat matching \"$search_term\":</b>\n" if $i == 1;
+		print "<b>Found $i bleats matching \"$search_term\":</b>\n" if $i > 1;
+		print format_bleats($current_user[0], @bleat_matches);
+
+		#appends form to allow the user to type a reply to a bleat using a prompt
+		print <<eof;
+<form id="reply_to_a_bleat" method="POST" action="">
+  <input type="hidden" name="reply_bleat" id="reply_bleat">
+  <input type="hidden" name="in_reply_to" id="in_reply_to">
+  <input type="hidden" name="search_phrase" value="$search_term">
+  <input type="hidden" name="search_type" value="$search_type">
+</form>
+eof
+
+	} elsif (%users) {
+		print "<b>Found $i user matching \"$search_term\":</b>\n" if $i == 1;
+		print "<b>Found $i users matching \"$search_term\":</b>\n" if $i > 1;
+		format_user_results($i, %users);
+	} else {
+		print "No search results found for \"$search_term\"\n";
+	}
+
+	#appends form for viewing next 16 results if there were more than 16 results
+	if ($i > 16 && !defined $supress) {
+		print <<eof;
+
+<div align="center">
+  <form method="POST" action="">
+    <input type="submit" name="more" value="Show more results" class="bitter_button">
+    <input type="hidden" name="num_displayed" value="$display_up_to">
+    <input type="hidden" name="search_phrase" value="$search_term">
+    <input type="hidden" name="search_type" value="$search_type">
+  </form>
+</div>
+eof
+	}
+
+}
+
+#searches for and returns number of results regarding searches for users
+sub find_user_results {
+	my $search = $_[0];
+	my @users = glob("$users_dir/*");
 	my $i = 0;
 
 	#finds all users matching $search
 	for $user (@users) {
 		my $username_to_search = $user;
 		$username_to_search =~ s/.*\///;
+		my $user_info = "$user/details.txt";
 
 		if (index(lc $username_to_search, lc $search) != -1) {
 			#matches user with given username
-			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
 
 			#obtains full name of user
@@ -656,84 +731,98 @@ sub display_search_results {
 			$i++;
 		} else {
 			#matches user with given full name
-			my $user_info = "$user/details.txt";
 			open USER, "<", $user_info or die "Cannot open $user_info: $!";
+
+			#obtains and checks full name of user
 			foreach $line (<USER>) {
 				$users{$user} = $1 and $i++ if $line =~ /^full_name: (.*\Q$search\E.*)/i;
 			}
+
 			close USER;
 		}
 
 	}
 
+	return $i;
+}
+
+#searches for and returns number of results regarding searches for bleats
+sub find_bleat_results {
+	my $search = $_[0];
+	my @bleats = glob("$bleats_dir/*");
+	my $i = 0;
+
 	#finds all bleats matching $search
 	for $bleat (@bleats) {
 		open BLEAT, $bleat or die "Cannot open $bleat: $!";
 
-		#extracts username of bleater and bleat message
+		#extracts the bleat message
 		while (<BLEAT>) {
-			$username = $1 if $_ =~ /^username: (.+)/;
 			$bleat_msg = $1 if $_ =~ /^bleat: (.+)/;
 		}
 
 		close BLEAT;
-		$bleats{$username} .= "$bleat_msg<br>\n" and $i++ if index(lc $bleat_msg, lc $search) != -1;
+		push @bleat_matches, $bleat and $i++ if index(lc $bleat_msg, lc $search) != -1;
 	}
 
-	#dispays results which matched $search or a message that no results were found
-	if ($i eq 0) {
-		print "No search results found for \"$search_term\"\n";
-	} else {
-		print "<b>Found $i search result for \"$search_term\":</b>\n" if $i == 1;
-		print "<b>Found $i search results for \"$search_term\":</b>\n" if $i > 1;
-		generate_search_results("Username", %users) if $search_type ne "bleats";
-		generate_search_results("Bleated by", %bleats) if $search_type ne "users";
-	}
-
+	return $i;
 }
 
 #formats search results in human-readable form with links to relevant user page
-sub generate_search_results {
-	my ($type_of_match, %matches) = @_;
-	print "<table>";
+sub format_user_results {
+	my ($num_matches, %matches) = @_;
+	my $i = 0;
 
 	#prints a form for each match, displaying match and link to profile
-	foreach $key (sort(keys %matches)) {
-		print <<eof;
-<tr><td>
+	foreach $key (sort keys %matches) {
+
+		#ensures that only 16 matches at a time are displayed
+		if ($i >= $displayed_up_to) {
+			last if $i == $display_up_to;
+			print <<eof;
+<p>
 <i>$matches{$key}</i>
 eof
 
-		$key =~ s/$users_dir\///;
-		print <<eof;
-
+			$key =~ s/$users_dir\///;
+			print <<eof;
 <form method="POST" action="">
-  $type_of_match: <input type="submit" name="view_profile" value="$key" class="bitter_link">
+  Username: <input type="submit" name="view_profile" value="$key" class="bitter_link">
   <input type="hidden" name="profile_to_view" value="$users_dir/$key">
 </form>
 <br>
-</td></tr>
-
 eof
+		}
+
+		$i++;
 	}
 
-	print "</table>\n";
+	#supresses view more bleats button if end of results reached
+	my @arr = keys %matches;
+	$supress = 1 if $i == $#arr + 1;
 }
 
 #toggles listening/unlistening to specified user
 sub listen_to_user {
 	my ($user, $current_user, $previous_page) = @_;
 	my $user_profile = "$users_dir/$current_user/details.txt";
-	display_page_banner();
 
+	#displays appropriate page banner
+	if (defined param('search_phrase')) {
+		display_page_banner(param('search_phrase'), param('search_type'));
+	} else {
+		display_page_banner();
+	}
+
+	#adds or removes specified user frm listens
 	if ($user =~ /^Unlisten (.+)/) {
-		my $unlisten_to = $1;
+		$user_to_update = $1;
 		open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
 		my $i = 0;
 
 		#removes $unlisten_to user from the listen data
 		while (<USER>) {
-			$_ =~ s/$unlisten_to//g;
+			$_ =~ s/$user_to_update//g;
 			$_ =~ s/ $//;
 			$lines[$i++] = $_;
 		}
@@ -744,10 +833,8 @@ sub listen_to_user {
 		open USER, ">", $user_profile or die "Cannot write $user_profile: $!";
 		print USER @lines;
 		close USER;
-
-		display_user_profile("$users_dir/$unlisten_to") if $previous_page eq "profile";
 	} elsif ($user =~ /^Listen to (.+)/) {
-		my $listen_to = $1;
+		$user_to_update = $1;
 		open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
 		my $i = 0;
 
@@ -755,7 +842,7 @@ sub listen_to_user {
 		while (<USER>) {
 			if ($_ =~ /^(listens:.*)/) {
 				my $current_listens = $1;
-				$current_listens .= " $listen_to\n";
+				$current_listens .= " $user_to_update\n";
 				$lines[$i++] = $current_listens;
 			} else {
 				$lines[$i++] = $_;
@@ -768,9 +855,15 @@ sub listen_to_user {
 		open USER, ">", $user_profile or die "Cannot write $user_profile: $!";
 		print USER @lines;
 		close USER;
-		display_user_profile("$users_dir/$listen_to") if $previous_page eq "profile";	
 	}
 
+	#displays search results page if applicable
+	if (defined param('search_phrase')) {
+		display_search_results(param('search_phrase'), param('search_type'));
+		return;
+	}
+
+	display_user_profile("$users_dir/$user_to_update") if $previous_page eq "profile";
 	display_user_profile("$users_dir/$current_user") if $previous_page eq "home";
 }
 
