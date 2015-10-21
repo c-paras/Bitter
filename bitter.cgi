@@ -156,6 +156,13 @@ eof
 	#allows user to reset password
 	print_page_header();
 	reset_password(param('email'));
+} elsif (defined param('reset_password')) {
+	print_page_header();
+	reset_password_form(param('reset_password'), param('username'));
+} elsif (defined param('change_password')) {
+	#changes user's password
+	print_page_header();
+	change_password(param('new_password'), param('confirm_password'), param('username'), param('password_rnd'));
 } else {
 	#authenticates user for first time
 	print_page_header();
@@ -198,11 +205,11 @@ sub display_login_page {
 <center>
   <form id="login_form" method="POST" action="">
     <table cellpadding="2">
-      <tr><td>Username</td></tr>
+      <tr><td>Username:</td></tr>
       <tr><td><input type="text" name="username" class="bitter_textfield"></td></tr>
       <tr><td></td></tr>
       <tr><td></td></tr>
-      <tr><td>Password</td></tr>
+      <tr><td>Password:</td></tr>
       <tr><td><input type="password" name="password" class="bitter_textfield"></td></tr>
     </table>
     <p>
@@ -241,22 +248,85 @@ sub reset_password {
 		open USER, "<", $user or die "Cannot open $user: $!";
 		while (<USER>) {
 			$user_exists = 1 if $_ =~ /^email: \Q$email\E/;
+			$username = $1 if $_ =~ /^username: (.+)/;
 		}
 		close USER;
 		if ($user_exists) {
 			my $unique_rnd = md5_hex(time() + $$);
 			chomp $unique_rnd;
-#			system "echo 'Copy and paste this link into your browser to reset your password: bitter.cgi?reset_password=$unique_rnd' |mutt -e 'set copy=no' -s 'Reset Bitter Password' -- '$email'" or die "Cannot run mutt";
 
-open MAIL, '|-', "mail -s 'Reset Bitter Password' \Q$email\E" or die "Cannot run mail";
-print MAIL "Copy and paste this link into your browser to reset your password: bitter.cgi?reset_password=$unique_rnd";
-close MAIL;
+                        #stores token in direcotry
+			$token_file = "tokens/$unique_rnd";
+			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
+			open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
+			close TOKEN;
+
+			open MAIL, "|-", "mail -s 'Reset Bitter Password' \Q$email\E" or die "Cannot run mail: $!";
+			print MAIL "Copy and paste this link into your browser to reset your password: $ENV{SCRIPT_URI}?reset_password=$unique_rnd&username=$username";
+			close MAIL;
 			last;
 		}
 
 	}
 
 	display_login_page();
+}
+
+#provides form for resetting a password
+sub reset_password_form {
+	my ($token, $user) = @_;
+
+	#ensures that only a valid user with access to provided email can reset password
+	if (! -e "tokens/$token" || ! -e "$users_dir/$user") {
+		display_login_page();
+	} elsif (length($token) < 30 || length($user) < 5 || -M "tokens/$token" > 1) {
+		display_login_page();
+	} else {
+		print <<eof;
+<div class="bitter_heading">Welcome to Bitter</div>
+<center>
+  <div class="bitter_subheading">Reset Bitter Password</div>
+  <p>
+  <form method="POST" action="">
+    <table cellpadding="2">
+      <tr><td>New password:</td><tr>
+      <tr><td><input type="text" name="new_password" class="bitter_textfield"></td></tr>
+      <tr><td></td><tr>
+      <tr><td></td><tr>
+      <tr><td>Confirm password:</td><tr>
+      <tr><td><input type="text" name="confirm_password" class="bitter_textfield"></td></tr>
+    </table>
+    <p>
+    <input type="submit" name="change_password" value="Reset password" class="bitter_button">
+    <input type="hidden" name="username" value="$user">
+    <inpit type="hidden" name="password_rnd" value="$token">
+  </form>
+</center>
+eof
+	}
+}
+
+#changes a user's password
+sub change_password {
+	my ($new_password, $confirm_password, $username, $unique_id) = @_;
+
+	if ($new_password ne $confirm_password) {
+		print "Passwords do not match.\n"; #red wrting....
+		reset_password_form($unique_id, $username);
+	} elsif (length($new_password) < 8) { #more conditions and secutiry percautins...
+		print "New password must contain at least 8 characters.\n";
+		reset_password_form($unique_id, $username);
+	} else {
+		my $user_file = "$users_dir/$username/details.txt";
+		open USER, "<", $user_file or die "Cannot open $user_file: $!";
+		while (<USER>) {
+			push @user_data, $_ if $_ !~ /^password:/;
+		}
+		close USER;
+		push @user_data, "password: $new_password";
+		unlink "tokens/$token" or die "Cannot remove tokens/$token: $!";
+	}
+
 }
 
 #displays error message and prompts for re-authentication
