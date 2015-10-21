@@ -18,3 +18,4 @@ Date		Time		Activity	Description
 20/10/2015	17:30-23:15	coding		improved bleating implementation, modularised and improved searching and implemented pagination for searching, fixed layout
 21/10/2015	08:30-09:50	coding		improved session id handling by using an md5 hash
 21/10/2015	13:00-15:45	coding		implemented deletion of bleats
+21/10/2015	20:30-22:30	coding		partially implemented password recovery

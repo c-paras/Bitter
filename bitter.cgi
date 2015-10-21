@@ -152,10 +152,10 @@ eof
 			print_page_header();
 			wrong_credentials_page();
 		}
-} elsif (defined param('reset')) {
+} elsif (defined param('email')) {
 	#allows user to reset password
 	print_page_header();
-	print "<font color=\"red\">This page is a placeholder.</font>\n";
+	reset_password(param('email'));
 } else {
 	#authenticates user for first time
 	print_page_header();
@@ -192,22 +192,71 @@ sub display_login_page {
 		print '<div class="bitter_heading">Welcome to Bitter</div>', "\n";
 	}
 
+#	my $valid_email_chars = quotemeta(\w\.\@\-\!\#\$\%\&\'\*\+\-\/\=\?\^_\`\{\|\}\~);
+#<!--      result = result.replace(/[^$valid_email_chars]/g, '');-->
 	print <<eof;
 <center>
-  <form method="POST" action="">
+  <form id="login_form" method="POST" action="">
     <table cellpadding="2">
       <tr><td>Username</td></tr>
       <tr><td><input type="text" name="username" class="bitter_textfield"></td></tr>
+      <tr><td></td></tr>
+      <tr><td></td></tr>
       <tr><td>Password</td></tr>
       <tr><td><input type="password" name="password" class="bitter_textfield"></td></tr>
     </table>
     <p>
     <input type="submit" name="login" value="Login" class="bitter_button">
-    <input type="submit" name="reset" value="Reset password" class="bitter_button">
+    <input type="button" name="reset" value="Reset password" onclick="reset_password();" class="bitter_button">
+    <input type="hidden" name="email" id="email">
   </form>
 </center>
 
+<script type="text/javascript">
+  function reset_password() {
+    var result = prompt("Enter your email:");
+    if (result.match(/^\\s*\$/) === null && result.match(/@/)) {
+      document.getElementById("email").value = result;
+      alert("If the email you provided is linked to an account, you will recieve an email with instructions shortly.");
+      document.getElementById("login_form").submit();
+    } else {
+      alert("Please enter a valid email.");
+    }
+  }
+</script>
+
 eof
+}
+
+#allows a user to reset a forgotten or compromised password
+sub reset_password {
+	my $email = $_[0];
+	chomp $email;
+	$email = substr($email, 0, 256);
+
+	my @users = glob("$users_dir/*/details.txt");
+	my $user_exists = 0;
+
+	foreach $user (@users) {
+		open USER, "<", $user or die "Cannot open $user: $!";
+		while (<USER>) {
+			$user_exists = 1 if $_ =~ /^email: \Q$email\E/;
+		}
+		close USER;
+		if ($user_exists) {
+			my $unique_rnd = md5_hex(time() + $$);
+			chomp $unique_rnd;
+#			system "echo 'Copy and paste this link into your browser to reset your password: bitter.cgi?reset_password=$unique_rnd' |mutt -e 'set copy=no' -s 'Reset Bitter Password' -- '$email'" or die "Cannot run mutt";
+
+open MAIL, '|-', "mail -s 'Reset Bitter Password' \Q$email\E" or die "Cannot run mail";
+print MAIL "Copy and paste this link into your browser to reset your password: bitter.cgi?reset_password=$unique_rnd";
+close MAIL;
+			last;
+		}
+
+	}
+
+	display_login_page();
 }
 
 #displays error message and prompts for re-authentication
