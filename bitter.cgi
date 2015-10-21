@@ -91,8 +91,14 @@ if (defined $token) {
 			add_bleat($current_user[0], param('bleat_to_send'));
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
-		} elsif (defined param('reply_bleat')) {
-			add_bleat($current_user[0], param('reply_bleat'), param('in_reply_to'));
+		} elsif (defined param('reply_bleat') || defined param('bleat_to_delete')) {
+
+			#replies to or deletes specified bleat
+			if (defined param('bleat_to_delete')) {
+				delete_bleat(param('bleat_to_delete'), $current_user[0]);
+			} else {
+				add_bleat($current_user[0], param('reply_bleat'), param('in_reply_to'));
+			}
 
 			#navigates to relevant profile page or to search results page
 			if (defined param('profile_in_view')) {
@@ -402,15 +408,13 @@ sub append_options {
 	#constructs form with reply button, listen button and relevant hidden fields
 	my $form_to_return = <<eof;
 
-<input type="button" name="reply" value="Reply to $bleater" onclick="reply_field($bleat_id);" class="bitter_button"> <input type="submit" name="listen" value="$type $bleater" class="bitter_button"><input type="hidden" name="previous_page" value="$current_page">
-<input type="hidden" name="num_displayed" value="$display_offset">
+<input type="button" name="reply" value="Reply to $bleater" onclick="reply_field($bleat_id);" class="bitter_button"> <input type="submit" name="listen" value="$type $bleater" class="bitter_button"><input type="hidden" name="previous_page" value="$current_page"><input type="hidden" name="num_displayed" value="$display_offset">
 eof
 
 	#appends search info to form if available
 	if (defined $search_term) {
 		$form_to_return .= <<eof;
-<input type="hidden" name="search_phrase" value="$search_term">
-<input type="hidden" name="search_type" value="$search_type">
+<input type="hidden" name="search_phrase" value="$search_term"><input type="hidden" name="search_type" value="$search_type">
 eof
 	}
 
@@ -503,8 +507,19 @@ sub user_bleats {
 </form>
 eof
 
+	#appends form for deleting a bleat
+	$bleats_to_display .= <<eof;
+
+<form id="delete_a_bleat" method="POST" action="">
+  <input type="hidden" name="bleat_to_delete" id="bleat_to_delete">
+  <input type="hidden" name="num_displayed" value="$display_offset">
+  <input type="hidden" name="profile_in_view" value="$users_dir/$user">
+</form>
+eof
+
 	#appends form for viewing the next 16 bleats
 	$bleats_to_display .= <<eof;
+
 <div align="right">
   <form method="POST" action="">
     <input type="submit" name="next" value="Show more bleats" class="bitter_button">
@@ -579,16 +594,15 @@ sub format_bleats {
 		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 		$current_user[0] = param('username') if !$current_user[0];
 
-		#appends options to reply and listen/unlisten where appropriate
+		#appends options to reply, listen/unlisten and delete bleat where appropriate
+		$bleats_to_display .= '<form method="POST" action="">';
 		if ($bleater ne $current_user[0]) {
-			$bleats_to_display .= '<form method="POST" action="">';
 			$bleats_to_display .= append_options($bleater, $bleat, $current_user[0], $user);
-			$bleats_to_display .= "</form>";
 		} else {
-			$bleats_to_display .= "\n<br>";
+			$bleats_to_display .= delete_bleat_option($bleat, $current_user[0], $user);
 		}
 
-		$bleats_to_display .= "</div>\n<p>\n";
+		$bleats_to_display .= "</form>\n</div>\n<p>\n";
 	}
 
 	#appends javascript to allow the user to type a reply to a bleat using a prompt
@@ -604,10 +618,84 @@ sub format_bleats {
     }
   }
 </script>
+eof
 
+	#appends javascript to allow confirmation of deletion
+	$bleats_to_display .= <<eof;
+
+<script type="text/javascript">
+  function confirm_deletion(bleat_id) {
+    var response = confirm("Are you sure you want to delete this bleat?");
+    if (response === true) {
+      document.getElementById("bleat_to_delete").value = bleat_id;
+      document.getElementById("delete_a_bleat").submit();
+    }
+  }
+</script>
 eof
 
 	return $bleats_to_display;
+}
+
+#returns html for a form to delete a bleat posted by user
+sub delete_bleat_option {
+	my ($bleat_id, $current_user, $user_being_viewed) = @_;
+
+	#approximates current page for next viewing
+	my $display_offset = param('num_displayed') || 0;
+
+	#determines whether current user's profile is being viewed
+	$current_page = "home" if $current_user eq $user_being_viewed;
+	$current_page = "profile" if $current_user ne $user_being_viewed;
+
+	#sets up delete button and javascript to confirm deletion
+	my $form_to_return = <<eof;
+
+<input type="button" name="delete_bleat" value="Delete bleat" onclick="confirm_deletion($bleat_id);" class="bitter_button">
+eof
+
+	return $form_to_return;
+}
+
+#deletes specified bleat from collection and any record of bleat
+sub delete_bleat {
+	my ($bleat_id, $current_user) = @_;
+
+	#deletes the bleat from the bleat collection
+	my $bleat_to_delete = "$bleats_dir/$bleat_id";
+	unlink $bleat_to_delete or die "Cannot remove $bleat_to_delete: $!";
+
+	#sets an array contaning all but deleted bleat
+	my $user_bleats = "$users_dir/$current_user/bleats.txt";
+	open USER, "<", $user_bleats or die "Cannot open $user_bleats: $!";
+	while (<USER>) {
+		push @new_bleats, $_ if $_ !~ /$bleat_id/;
+	}
+	close USER;
+
+	#writes out new set of sent bleats
+	open BLEATS, ">", $user_bleats or die "Cannot write $user_bleats: $!";
+	print BLEATS @new_bleats;
+	close BLEATS;
+
+	#deletes the in_reply_to field of all bleats which refer to deleted bleat
+	my @all_bleats = glob("$bleats_dir/*");
+	foreach $bleat (@all_bleats) {
+		open BLEAT, "<", $bleat or die "Cannot open $bleat: $!";
+		my @lines = <BLEAT>;
+		close BLEAT;
+
+		#modifies bleat file if it is a reply to deleted bleat
+		if (grep(/^in_reply_to: $bleat_id/, @lines)) {
+			open BLEAT, ">", $bleat or die "Cannot open $bleat: $!";
+			foreach (@lines) {
+				print BLEAT $_ if $_ !~ /^in_reply_to: $bleat_id/; #skips reply line
+			}
+			close BLEAT;
+		}
+
+	}
+
 }
 
 #appends and sorts bleats that mention user and bleats of users they listen to
@@ -672,9 +760,19 @@ sub display_search_results {
 
 		#appends form to allow the user to type a reply to a bleat using a prompt
 		print <<eof;
+
 <form id="reply_to_a_bleat" method="POST" action="">
   <input type="hidden" name="reply_bleat" id="reply_bleat">
   <input type="hidden" name="in_reply_to" id="in_reply_to">
+  <input type="hidden" name="search_phrase" value="$search_term">
+  <input type="hidden" name="search_type" value="$search_type">
+</form>
+eof
+
+		#appends form for deleting a bleat
+		print <<eof;
+<form id="delete_a_bleat" method="POST" action="">
+  <input type="hidden" name="bleat_to_delete" id="bleat_to_delete">
   <input type="hidden" name="search_phrase" value="$search_term">
   <input type="hidden" name="search_type" value="$search_type">
 </form>
