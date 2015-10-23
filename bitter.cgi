@@ -460,7 +460,6 @@ sub user_details {
 	}
 
 	close DETAILS;
-	encode_profile_text($about) if $about ne "Unknown";
 
 	#appends user details to profile box
 	my $details = <<eof;
@@ -1174,30 +1173,11 @@ eof
 #updates user details based on newly supplied information
 sub update_user_details {
 	my ($suburb, $lat, $long, $about, $user) = @_;
+	sanitise_details("home_suburb", $suburb, 50);
+	sanitise_details("home_latitude", $lat, 10);
+	sanitise_details("home_longitude", $long, 10);
 
-	#sanitises user input
-	$suburb = substr($suburb, 0, 50);
-	$lat = substr($lat, 0, 10);
-	$long = substr($long, 0, 10);
-
-	$suburb =~ s/\s{2,}/ /g;
-	$suburb =~ s/^\s*//;
-	$suburb =~ s/\s*$//;
-	encode_output($suburb);
-	push @new_details, "home_suburb: $suburb\n" if $suburb !~ /^\s*$/;
-
-	$lat =~ s/\s{2,}/ /g;
-	$lat =~ s/^\s*//;
-	$lat =~ s/\s*$//;
-	encode_output($lat);
-	push @new_details, "home_latitude: $lat\n" if $lat !~ /^\s*$/;
-
-	$long =~ s/\s{2,}/ /g;
-	$long =~ s/^\s*//;
-	$long =~ s/\s*$//;
-	encode_output($long);
-	push @new_details, "home_longitude: $long\n" if $long !~ /^\s*$/;
-
+	#sanitises user input for profile text
 	$about = substr($about, 0, 142);
 	$about =~ s/\s{2,}/ /g;
 	$about =~ s/^\s*//;
@@ -1209,8 +1189,8 @@ sub update_user_details {
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 
 	#extracts relevant user information
-	foreach $_ (<DETAILS>) {
-			push @new_details, $_ if $_ !~ /^home/ && $_ !~ /^about/;
+	while (<DETAILS>) {
+		push @new_details, $_ if $_ !~ /^home/ && $_ !~ /^about/;
 	}
 
 	close DETAILS;
@@ -1221,6 +1201,17 @@ sub update_user_details {
 	close DETAILS;
 
 	display_user_profile("$users_dir/$user");
+}
+
+#sanitises input details
+sub sanitise_details {
+	my ($field_name, $data, $max_length) = @_;
+	$data = substr($data, 0, $max_length); #limits length of data
+	$data =~ s/\s{2,}/ /g; #condenses whitespace
+	$data =~ s/^\s*//;
+	$data =~ s/\s*$//;
+	encode_output($data);
+	push @new_details, "$field_name: $data\n" if $data !~ /^\s*$/;
 }
 
 #placed at the top of every page
@@ -1268,9 +1259,8 @@ eof
 
 #sanitises profile text by escaping all but safe html metacharacters
 sub encode_profile_text {
-	$_[0] =~ s/\&/&amp;/g;
-	$_[0] =~ s/\"/&quot;/g;
-	$_[0] =~ s/<(\/?[^bui]+)>/&lt;$1&gt;/gi; #allows only bold, italic and underline
+	encode_output($_[0]);
+	$_[0] =~ s/&lt;(\/?[bui])\s*&gt;/\<$1\>/gi; #allows only bold, italic and underline
 }
 
 #sanitises a given output string by escaping html metacharacters
