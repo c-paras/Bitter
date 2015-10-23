@@ -120,6 +120,12 @@ if (defined $token) {
 		} elsif (defined param('update')) {
 			display_page_banner();
 			update_details($current_user[0]);
+		} elsif (defined param('suburb')) {
+			display_page_banner();
+			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
+		} elsif (defined param('cancel_update')) {
+			display_page_banner();
+			display_user_profile("$users_dir/$current_user[0]");
 		} else {
 			display_login_page();
 		}
@@ -209,11 +215,11 @@ sub display_login_page {
 <center>
   <form id="login_form" method="POST" action="">
     <table cellpadding="2">
-      <tr><td>Username:</td></tr>
+      <tr><td><b>Username:</b></td></tr>
       <tr><td><input type="text" name="username" class="bitter_textfield"></td></tr>
       <tr><td></td></tr>
       <tr><td></td></tr>
-      <tr><td>Password:</td></tr>
+      <tr><td><b>Password:</b></td></tr>
       <tr><td><input type="password" name="password" class="bitter_textfield"></td></tr>
     </table>
     <p>
@@ -294,11 +300,11 @@ sub reset_password_form {
   <p>
   <form method="POST" action="">
     <table cellpadding="2">
-      <tr><td>New password:</td><tr>
+      <tr><td><b>New password:</b></td><tr>
       <tr><td><input type="text" name="new_password" class="bitter_textfield"></td></tr>
       <tr><td></td><tr>
       <tr><td></td><tr>
-      <tr><td>Confirm password:</td><tr>
+      <tr><td><b>Confirm password:</b></td><tr>
       <tr><td><input type="text" name="confirm_password" class="bitter_textfield"></td></tr>
     </table>
     <p>
@@ -394,7 +400,7 @@ eof
 sub display_user_profile {
 	#displays user profile specified as argument
 	my $user_to_show = $_[0];
-	
+
 	my $details_filename = "$user_to_show/details.txt";
 	my $image_filename = "profile_default.jpg"; #default profile image
 	my $bleats_filename = "$user_to_show/bleats.txt";
@@ -436,7 +442,7 @@ sub user_details {
 	foreach $line (<DETAILS>) {
 		$name = $1 if $line =~ /^full_name: (.+)/;
 		$user = $1 if $line =~ /^username: (.+)/;
-		$location = $1 if $line =~ /^home_suburb: (.+)/;	
+		$location = $1 if $line =~ /^home_suburb: (.+)/;
 		$latitude = $1 if $line =~ /^home_latitude: (.+)/;
 		$longitude = $1 if $line =~ /^home_longitude: (.+)/;
 
@@ -479,7 +485,7 @@ eof
 	if ($user eq $current_user[0]) {
 		$details .= <<eof;
 <form method="POST" action="">
-  <input type="submit" name="update" value="Update Details" class="bitter_button">
+  <input type="submit" name="update" value="Update details" class="bitter_button">
 </form>
 </div>
 eof
@@ -1111,7 +1117,110 @@ sub listen_to_user {
 #provides a form for updating user profile details
 sub update_details {
 	my $user = $_[0];
-	print "update details form\n";
+	my $details_filename = "$users_dir/$user/details.txt";
+	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
+	my $suburb = my $latitude = my $longitude = my $about = "";
+
+	#extracts non-sensitive user information
+	foreach $line (<DETAILS>) {
+		$suburb = $1 if $line =~ /^home_suburb: (.+)/;	
+		$latitude = $1 if $line =~ /^home_latitude: (.+)/;
+		$longitude = $1 if $line =~ /^home_longitude: (.+)/;
+		$about = $1 if $line =~ /^about_me: (.+)/;
+	}
+
+	close DETAILS;
+
+	print <<eof;
+<form id="update_details_form" method="POST" action="">
+<table>
+  <tr>
+    <td><b>Suburb:</b></td>
+    <td><input type="text" name="suburb" value="$suburb" style="width:250px;"></td>
+  </tr>
+  <tr>
+    <td><b>Latitude:</b></td>
+    <td><input type="text" name="lat" value="$latitude" style="width:250px;"></td>
+  </tr>
+  <tr>
+    <td><b>Longitude:</b></td>
+    <td><input type="text" name="long" value="$longitude" style="width:250px;"></td>
+  </tr>
+  <tr>
+    <td style="vertical-align: text-top;"><b>About Me:</b></td>
+    <td><textarea name="about_me" onkeydown="auto_submit(event);" style="width: 250px; height: 100px; resize: none;">$about</textarea></td>
+  </tr>
+  <tr><td></td><td style="text-align: right;">
+    <input type="button" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
+    <input type="submit" name="cancel_update" value="Cancel" class="bitter_button">
+  </td></tr>
+</table>
+</form>
+
+<script type="text/javascript">
+  function update_details() {
+      document.getElementById("update_details_form").submit();
+  }
+
+  function auto_submit(e) {
+    if (e.keyCode === 13) {
+      document.getElementById("update_details_form").submit();
+    }
+  }
+</script>
+eof
+}
+
+#updates user details based on newly supplied information
+sub update_user_details {
+	my ($suburb, $lat, $long, $about, $user) = @_;
+
+	#sanitises user input
+	$suburb = substr($suburb, 0, 50);
+	$lat = substr($lat, 0, 10);
+	$long = substr($long, 0, 10);
+
+	$suburb =~ s/\s{2,}/ /g;
+	$suburb =~ s/^\s*//;
+	$suburb =~ s/\s*$//;
+	encode_output($suburb);
+	push @new_details, "home_suburb: $suburb\n" if $suburb !~ /^\s*$/;
+
+	$lat =~ s/\s{2,}/ /g;
+	$lat =~ s/^\s*//;
+	$lat =~ s/\s*$//;
+	encode_output($lat);
+	push @new_details, "home_latitude: $lat\n" if $lat !~ /^\s*$/;
+
+	$long =~ s/\s{2,}/ /g;
+	$long =~ s/^\s*//;
+	$long =~ s/\s*$//;
+	encode_output($long);
+	push @new_details, "home_longitude: $long\n" if $long !~ /^\s*$/;
+
+	$about = substr($about, 0, 142);
+	$about =~ s/\s{2,}/ /g;
+	$about =~ s/^\s*//;
+	$about =~ s/\s*$//;
+	encode_profile_text($about);
+	push @new_details, "about_me: $about\n" if $about !~ /^\s*$/;
+
+	my $details_filename = "$users_dir/$user/details.txt";
+	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
+
+	#extracts relevant user information
+	foreach $_ (<DETAILS>) {
+			push @new_details, $_ if $_ !~ /^home/ && $_ !~ /^about/;
+	}
+
+	close DETAILS;
+
+	#updates user info
+	open DETAILS, ">", $details_filename or die "Cannot write $details_filename: $!";
+	print DETAILS $_ foreach @new_details;
+	close DETAILS;
+
+	display_user_profile("$users_dir/$user");
 }
 
 #placed at the top of every page
