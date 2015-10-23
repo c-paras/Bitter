@@ -120,12 +120,12 @@ if (defined $token) {
 		} elsif (defined param('update')) {
 			display_page_banner();
 			update_details($current_user[0]);
-		} elsif (defined param('suburb')) {
-			display_page_banner();
-			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
 		} elsif (defined param('cancel_update')) {
 			display_page_banner();
 			display_user_profile("$users_dir/$current_user[0]");
+		} elsif (defined param('suburb')) {
+			display_page_banner();
+			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
 		} else {
 			display_login_page();
 		}
@@ -760,6 +760,10 @@ sub format_bleats {
   function reply_field(bleat_id) {
     var msg = prompt("Enter reply:");
     if (msg.match(/^\\s*\$/) === null) {
+      msg = msg.replace(/&/g, "&amp;");
+      msg = msg.replace(/\"/g, "&quot;");
+      msg = msg.replace(/</g, "&lt;");
+      msg = msg.replace(/>/g, "&gt;");
       document.getElementById("reply_bleat").value = msg;
       document.getElementById("in_reply_to").value = bleat_id;
       document.getElementById("reply_to_a_bleat").submit();
@@ -813,7 +817,7 @@ sub delete_bleat {
 	my $bleat_to_delete = "$bleats_dir/$bleat_id";
 	unlink $bleat_to_delete or die "Cannot remove $bleat_to_delete: $!";
 
-	#sets an array contaning all but deleted bleat
+	#sets an array contaning all but the deleted bleat
 	my $user_bleats = "$users_dir/$current_user/bleats.txt";
 	open USER, "<", $user_bleats or die "Cannot open $user_bleats: $!";
 	while (<USER>) {
@@ -1060,7 +1064,7 @@ sub listen_to_user {
 		display_page_banner();
 	}
 
-	#adds or removes specified user frm listens
+	#adds or removes specified user from listens
 	if ($user =~ /^Unlisten (.+)/) {
 		$user_to_update = $1;
 		open USER, "<", $user_profile or die "Cannot open $user_profile: $!";
@@ -1120,7 +1124,7 @@ sub update_details {
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $suburb = my $latitude = my $longitude = my $about = "";
 
-	#extracts non-sensitive user information
+	#extracts relevant user information
 	foreach $line (<DETAILS>) {
 		$suburb = $1 if $line =~ /^home_suburb: (.+)/;	
 		$latitude = $1 if $line =~ /^home_latitude: (.+)/;
@@ -1130,6 +1134,7 @@ sub update_details {
 
 	close DETAILS;
 
+	#prints the user form
 	print <<eof;
 <form id="update_details_form" method="POST" action="">
 <table>
@@ -1176,14 +1181,13 @@ sub update_user_details {
 	sanitise_details("home_suburb", $suburb, 50);
 	sanitise_details("home_latitude", $lat, 10);
 	sanitise_details("home_longitude", $long, 10);
+	sanitise_details("about_me", $about, 142);
 
-	#sanitises user input for profile text
-	$about = substr($about, 0, 142);
-	$about =~ s/\s{2,}/ /g;
-	$about =~ s/^\s*//;
-	$about =~ s/\s*$//;
-	encode_profile_text($about);
-	push @new_details, "about_me: $about\n" if $about !~ /^\s*$/;
+	#sanitises profile text by escaping all but safe html metacharacters
+	if (@new_details && $new_details[$#new_details] =~ /^about/) {
+		#allows bolding, italics and underlining of text
+		$new_details[$#new_details] =~ s/&lt;(\/?[bui])\s*&gt;/\<$1\>/gi;
+	}
 
 	my $details_filename = "$users_dir/$user/details.txt";
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
@@ -1203,7 +1207,7 @@ sub update_user_details {
 	display_user_profile("$users_dir/$user");
 }
 
-#sanitises input details
+#sanitises and pushes to data collection the input given user details
 sub sanitise_details {
 	my ($field_name, $data, $max_length) = @_;
 	$data = substr($data, 0, $max_length); #limits length of data
@@ -1212,6 +1216,13 @@ sub sanitise_details {
 	$data =~ s/\s*$//;
 	encode_output($data);
 	push @new_details, "$field_name: $data\n" if $data !~ /^\s*$/;
+}
+
+#sanitises a given output string by escaping html metacharacters
+sub encode_output(\$) {
+	$_[0] =~ s/\"/&quot;/g;
+	$_[0] =~ s/\</&lt;/g;
+	$_[0] =~ s/\>/&gt;/g;
 }
 
 #placed at the top of every page
@@ -1255,18 +1266,4 @@ sub print_page_trailer {
 </body>
 </html>
 eof
-}
-
-#sanitises profile text by escaping all but safe html metacharacters
-sub encode_profile_text {
-	encode_output($_[0]);
-	$_[0] =~ s/&lt;(\/?[bui])\s*&gt;/\<$1\>/gi; #allows only bold, italic and underline
-}
-
-#sanitises a given output string by escaping html metacharacters
-sub encode_output(\$) {
-	$_[0] =~ s/\&/&amp;/g;
-	$_[0] =~ s/\"/&quot;/g;
-	$_[0] =~ s/\</&lt;/g;
-	$_[0] =~ s/\>/&gt;/g;
 }
