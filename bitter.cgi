@@ -199,8 +199,9 @@ sub display_login_page {
 		print '<div class="bitter_heading">Welcome to Bitter</div>', "\n";
 	}
 
-#	my $valid_email_chars = quotemeta(\w\.\@\-\!\#\$\%\&\'\*\+\-\/\=\?\^_\`\{\|\}\~);
-#<!--      result = result.replace(/[^$valid_email_chars]/g, '');-->
+	#andrewt's valid email regex with double escaping
+	my $valid_email_chars = "\\w\\.\\@\\-\\!\\#\\\$\\%\\&\\'\\*\\+\\-\\/\\=\\?\\^_\\`\\{\\|\\}\\~";
+print "<pre>".`env`."</pre>";
 	print <<eof;
 <center>
   <form id="login_form" method="POST" action="">
@@ -223,6 +224,7 @@ sub display_login_page {
   function reset_password() {
     var result = prompt("Enter your email:");
     if (result.match(/^\\s*\$/) === null && result.match(/@/)) {
+      result = result.replace(/[^$valid_email_chars]/g, '');
       document.getElementById("email").value = result;
       alert("If the email you provided is linked to an account, you will recieve an email with instructions shortly.");
       document.getElementById("login_form").submit();
@@ -255,8 +257,8 @@ sub reset_password {
 			my $unique_rnd = md5_hex(time() + $$);
 			chomp $unique_rnd;
 
-                        #stores token in direcotry
-			$token_file = "tokens/$unique_rnd";
+			#stores token in direcotry
+			$token_file = "tokens/$unique_rnd-$username";
 			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
 			open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
 			close TOKEN;
@@ -277,9 +279,9 @@ sub reset_password_form {
 	my ($token, $user) = @_;
 
 	#ensures that only a valid user with access to provided email can reset password
-	if (! -e "tokens/$token" || ! -e "$users_dir/$user") {
+	if (! -e "tokens/$token-$user" || ! -e "$users_dir/$user") {
 		display_login_page();
-	} elsif (length($token) < 30 || length($user) < 5 || -M "tokens/$token" > 1) {
+	} elsif (length($token) < 30 || length($user) < 5 || -M "tokens/$token-$user" > 1) {
 		display_login_page();
 	} else {
 		print <<eof;
