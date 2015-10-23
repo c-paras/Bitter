@@ -117,6 +117,9 @@ if (defined $token) {
 		} elsif (defined param('next')) {
 			display_page_banner();
 			display_user_profile(param('profile_in_view'));
+		} elsif (defined param('update')) {
+			display_page_banner();
+			update_details($current_user[0]);
 		} else {
 			display_login_page();
 		}
@@ -201,7 +204,7 @@ sub display_login_page {
 
 	#andrewt's valid email regex with double escaping
 	my $valid_email_chars = "\\w\\.\\@\\-\\!\\#\\\$\\%\\&\\'\\*\\+\\-\\/\\=\\?\\^_\\`\\{\\|\\}\\~";
-print "<pre>".`env`."</pre>";
+
 	print <<eof;
 <center>
   <form id="login_form" method="POST" action="">
@@ -427,7 +430,7 @@ sub user_details {
 	my ($details_filename, $image_filename) = ($_[0], $_[1]);
 	my $listen_option = $_[2] || '';
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
-	my $location = my $latitude = my $longitude = "Unkown";
+	my $location = my $latitude = my $longitude = my $about = "Unknown";
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
@@ -447,12 +450,14 @@ sub user_details {
 			$listens_to_display =~ s/ /\n/g; #displays listens as vertical list
 		}
 
+		$about = $1 if $line =~ /^about_me: (.+)/;
 	}
 
 	close DETAILS;
+	encode_profile_text($about) if $about ne "Unknown";
 
 	#appends user details to profile box
-	return <<eof;
+	my $details = <<eof;
 <div class="bitter_block">
   <b><font size="10">$name</font></b>
 
@@ -463,9 +468,26 @@ sub user_details {
 <b>Home Latitude:</b> $latitude
 <b>Home Longitude:</b> $longitude
 <b>Listens:</b> $listens_to_display
+<b>About Me:</b> $about
+eof
 
+	#gets currently logged in user
+	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+	$current_user[0] = param('username') if !$current_user[0];
+
+	#appends option to update account details if profile is that of current user
+	if ($user eq $current_user[0]) {
+		$details .= <<eof;
+<form method="POST" action="">
+  <input type="submit" name="update" value="Update Details" class="bitter_button">
+</form>
 </div>
 eof
+	} else {
+		$details .= "\n</div>\n";
+	}
+
+	return $details;
 }
 
 #provides interface for sending new bleats
@@ -1086,6 +1108,12 @@ sub listen_to_user {
 	display_user_profile("$users_dir/$current_user") if $previous_page eq "home";
 }
 
+#provides a form for updating user profile details
+sub update_details {
+	my $user = $_[0];
+	print "update details form\n";
+}
+
 #placed at the top of every page
 sub print_page_header {
 	my $token = $_[0] || ''; #obtains session id from passing argument if it exists
@@ -1127,6 +1155,13 @@ sub print_page_trailer {
 </body>
 </html>
 eof
+}
+
+#sanitises profile text by escaping all but safe html metacharacters
+sub encode_profile_text {
+	$_[0] =~ s/\&/&amp;/g;
+	$_[0] =~ s/\"/&quot;/g;
+	$_[0] =~ s/<(\/?[^bui]+)>/&lt;$1&gt;/gi; #allows only bold, italic and underline
 }
 
 #sanitises a given output string by escaping html metacharacters

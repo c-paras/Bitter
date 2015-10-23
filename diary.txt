@@ -19,4 +19,4 @@ Date		Time		Activity	Description
 21/10/2015	08:30-09:50	coding		improved session id handling by using an md5 hash
 21/10/2015	13:00-15:45	coding		implemented deletion of bleats
 21/10/2015	20:30-23:50	coding		partially implemented password recovery
-23/10/2015	12:15-		debugging	fixed password recovery
+23/10/2015	12:15-13:50	debugging	fixed password recovery
