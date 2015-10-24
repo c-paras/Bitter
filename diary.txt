@@ -20,4 +20,5 @@ Date		Time		Activity	Description
 21/10/2015	13:00-15:45	coding		implemented deletion of bleats
 21/10/2015	20:30-23:50	coding		partially implemented password recovery
 23/10/2015	12:15-13:50	debugging	fixed password recovery
-23/10/2015	5:30-22:10	coding		implemented editing of personal info and adding of safe profile text, fixed security bugs in javascript
+23/10/2015	17:30-22:10	coding		implemented editing of personal info and adding of safe profile text, fixed security bugs in javascript
+24/10/2015	11:00-12:10	debugging	fixed password recovery and security bugs

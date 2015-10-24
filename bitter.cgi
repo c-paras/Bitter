@@ -143,29 +143,29 @@ eof
 	}
 
 } elsif (defined param('login')) {
-		if (authenticate_user(param('username'), param('password'))) {
-			#generates unique session id
-			$token = md5_hex(time() + $$);
-			chomp $token;
+	if (authenticate_user(param('username'), param('password'))) {
+		#generates unique session id
+		$token = md5_hex(time() + $$);
+		chomp $token;
 
-			#stores token in direcotry
-			$token_file = "tokens/$token";
-			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
-			open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
-			close TOKEN;
+		#stores token in direcotry
+		$token_file = "tokens/$token";
+		mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
+		open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
+		close TOKEN;
 
-			print_page_header($token, param('username'));
-			display_page_banner();
-			display_user_profile("$users_dir/".param('username'));
-		} else {
-			print_page_header();
-			wrong_credentials_page();
-		}
+		print_page_header($token, param('username'));
+		display_page_banner();
+		display_user_profile("$users_dir/".param('username'));
+	} else {
+		print_page_header();
+		wrong_credentials_page();
+	}
 } elsif (defined param('email')) {
 	#allows user to reset password
 	print_page_header();
 	reset_password(param('email'));
-} elsif (defined param('reset_password')) {
+} elsif (defined param('reset_password') && defined param('username')) {
 	print_page_header();
 	reset_password_form(param('reset_password'), param('username'));
 } elsif (defined param('change_password')) {
@@ -251,10 +251,10 @@ sub reset_password {
 	my $email = $_[0];
 	chomp $email;
 	$email = substr($email, 0, 256);
-
 	my @users = glob("$users_dir/*/details.txt");
 	my $user_exists = 0;
 
+	#checks whether a user with the given email exists
 	foreach $user (@users) {
 		open USER, "<", $user or die "Cannot open $user: $!";
 		while (<USER>) {
@@ -262,6 +262,8 @@ sub reset_password {
 			$username = $1 if $_ =~ /^username: (.+)/;
 		}
 		close USER;
+
+		#allows resetting of password for valid users only
 		if ($user_exists) {
 			my $unique_rnd = md5_hex(time() + $$);
 			chomp $unique_rnd;
@@ -272,6 +274,7 @@ sub reset_password {
 			open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
 			close TOKEN;
 
+			#sends email for verification
 			open MAIL, "|-", "mail -s 'Reset Bitter Password' \Q$email\E" or die "Cannot run mail: $!";
 			print MAIL "Copy and paste this link into your browser to reset your password: $ENV{SCRIPT_URI}?reset_password=$unique_rnd&username=$username";
 			close MAIL;
@@ -285,7 +288,10 @@ sub reset_password {
 
 #provides form for resetting a password
 sub reset_password_form {
-	my ($token, $user) = @_;
+	my ($token, $user) = ($_[0], $_[1]);
+	my $warning = $_[2] || '';
+	$user =~ s/\W//g;
+	$token =~ s/\W//g;
 
 	#ensures that only a valid user with access to provided email can reset password
 	if (! -e "tokens/$token-$user" || ! -e "$users_dir/$user") {
@@ -298,44 +304,71 @@ sub reset_password_form {
 <center>
   <div class="bitter_subheading">Reset Bitter Password</div>
   <p>
+  <font color="red">$warning</font>
   <form method="POST" action="">
     <table cellpadding="2">
       <tr><td><b>New password:</b></td><tr>
-      <tr><td><input type="text" name="new_password" class="bitter_textfield"></td></tr>
-      <tr><td></td><tr>
-      <tr><td></td><tr>
-      <tr><td><b>Confirm password:</b></td><tr>
-      <tr><td><input type="text" name="confirm_password" class="bitter_textfield"></td></tr>
+      <tr><td><input type="password" name="new_password" class="bitter_textfield"></td></tr>
+      <tr><td></td></tr>
+      <tr><td></td></tr>
+      <tr><td><b>Confirm password:</b></td></tr>
+      <tr><td><input type="password" name="confirm_password" class="bitter_textfield"></td></tr>
     </table>
     <p>
     <input type="submit" name="change_password" value="Reset password" class="bitter_button">
     <input type="hidden" name="username" value="$user">
-    <inpit type="hidden" name="password_rnd" value="$token">
+    <input type="hidden" name="password_rnd" value="$token">
   </form>
 </center>
 eof
 	}
+
 }
 
 #changes a user's password
 sub change_password {
 	my ($new_password, $confirm_password, $username, $unique_id) = @_;
+	my $user_file = "$users_dir/$username/details.txt";
+	open USER, "<", $user_file or die "Cannot open $user_file: $!";
 
+	#extracts user information and seperates the old password
+	while (<USER>) {
+		push @user_data, $_ if $_ !~ /^password:/;
+		$current_password = $1 if $_ =~ /^password: (.+)/;
+	}
+
+	chomp $current_password;
+	close USER;
+
+	#validates password fields before changing password
 	if ($new_password ne $confirm_password) {
-		print "Passwords do not match.\n"; #red wrting....
-		reset_password_form($unique_id, $username);
-	} elsif (length($new_password) < 8) { #more conditions and secutiry percautins...
-		print "New password must contain at least 8 characters.\n";
-		reset_password_form($unique_id, $username);
+		my $warning = "Passwords do not match.";
+		reset_password_form($unique_id, $username, $warning);
+	} elsif (length($new_password) < 8) {
+		my $warning = "New password must contain at least 8 characters.";
+		reset_password_form($unique_id, $username, $warning);
+	} elsif (length($new_password) > 16) {
+		my $warning = "New password can be at most 16 characters long.";
+		reset_password_form($unique_id, $username, $warning);
+	} elsif ($new_password eq $current_password) {
+		my $warning = "New password must differ from current password.";
+		reset_password_form($unique_id, $username, $warning);
+	} elsif ($new_password !~ /\d/ || $new_password !~ /[a-z]/i) {
+		my $warning = "New password must contain numbers and letters.";
+		reset_password_form($unique_id, $username, $warning);		
 	} else {
-		my $user_file = "$users_dir/$username/details.txt";
-		open USER, "<", $user_file or die "Cannot open $user_file: $!";
-		while (<USER>) {
-			push @user_data, $_ if $_ !~ /^password:/;
-		}
-		close USER;
+		#writes out user information with new password
 		push @user_data, "password: $new_password";
-		unlink "tokens/$token" or die "Cannot remove tokens/$token: $!";
+		open USER, ">", $user_file or die "Cannot write $user_file: $!";
+		print USER @user_data;
+		close USER;
+
+		#removes token and reloads login page
+		my $token_file = "tokens/$unique_id-$username";
+		if (-e $token_file) {
+			unlink "$token_file" or die "Cannot remove $token_file: $!";
+		}
+		display_login_page();
 	}
 
 }
