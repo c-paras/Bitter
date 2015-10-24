@@ -23,3 +23,4 @@ Date		Time		Activity	Description
 23/10/2015	17:30-22:10	coding		implemented editing of personal info and adding of safe profile text, fixed security bugs in javascript
 24/10/2015	11:00-12:10	debugging	fixed password recovery and security bugs
 24/10/2015	12:45-15:00	coding		partially implemented user account creation
+24/10/2015	15:30-		coding		finished user account creation

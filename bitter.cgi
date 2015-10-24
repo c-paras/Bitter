@@ -61,7 +61,7 @@ eof
 
 #main bitter hierarchy logic
 if (defined $token) {
-	$token =~ s/[^\w]//g; #removes unexpected chars from token
+	$token =~ s/[^a-z0-9]//gi; #removes unexpected chars from token
 	$token_file = "tokens/$token";
 
 	#checks that token is valid and has been issued within the last day
@@ -193,7 +193,7 @@ exit 0;
 #validates user login credentials
 sub authenticate_user {
 	my ($username, $password) = @_;
-	$username =~ s/\W\D//g; #sanitises user login
+	$username =~ s/[^a-z0-9]//gi; #sanitises user login
 	return 0 if length($username) eq 0 || length($password) eq 0;
 	my $details_filename = "$users_dir/$username/details.txt";
 	return 0 if ! -e $details_filename; #checks whether user exists
@@ -289,8 +289,9 @@ sub reset_password {
 			close TOKEN;
 
 			#sends email for verification
-			open MAIL, "|-", "mail -s 'Reset Bitter Password' \Q$email\E" or die "Cannot run mail: $!";
-			print MAIL "Copy and paste this link into your browser to reset your password: $ENV{SCRIPT_URI}?reset_password=$unique_rnd&username=$username";
+			open MAIL, "|-", "mail -s 'Reset Bitter Password' '\Q$email\E'" or die "Cannot run mail: $!";
+			my $reset_url = "$ENV{SCRIPT_URI}?reset_password=$unique_rnd&username=$username";
+			print MAIL "Copy and paste this link into your browser to reset your password: $reset_url";
 			close MAIL;
 			last;
 		}
@@ -304,13 +305,13 @@ sub reset_password {
 sub reset_password_form {
 	my ($token, $user) = ($_[0], $_[1]);
 	my $warning = $_[2] || '';
-	$user =~ s/\W//g;
-	$token =~ s/\W//g;
+	$user =~ s/[^a-z0-9]//gi;
+	$token =~ s/[^a-z0-9]//gi;
 
 	#ensures that only a valid user with access to provided email can reset password
 	if (! -e "tokens/$token-$user" || ! -e "$users_dir/$user") {
 		display_login_page();
-	} elsif (length($token) < 30 || length($user) < 5 || -M "tokens/$token-$user" > 1) {
+	} elsif (length($token) < 30 || length($user) < 6 || -M "tokens/$token-$user" > 1) {
 		display_login_page();
 	} else {
 		print <<eof;
@@ -435,8 +436,8 @@ sub validate_account_creation {
 
 	#sanitises input parameters
 	$full_name = substr($full_name, 0, 142);
-	$email = substr($email, 0, 168);
-	$full_name =~ s/\<|\>|\.\.//g;
+	$email = substr($email, 0, 256);
+	$full_name =~ s/\<|\>|\||\\|\.\.|\///g;
 
 	#andrewt's valid email regex
 	my $valid_email_chars = '\w\.\@\-\!\#\$\%\&\'\*\+\-\/\=\?\^_\`\{\|\}\~';
@@ -474,7 +475,7 @@ sub validate_account_creation {
 		$email = "";
 	}
 
-        #validates password fields
+	#validates password fields
 	if ($password ne $confirm) {
 		$warnings .= "Error: Passwords do not match.<br>\n";
 	} elsif (length($password) < 8) {
@@ -620,7 +621,7 @@ sub display_user_profile {
 
 }
 
-#obtains a user's information and profile image
+#obtains and styles a user's information and profile image
 sub user_details {
 	my ($details_filename, $image_filename) = ($_[0], $_[1]);
 	my $listen_option = $_[2] || '';
@@ -1075,7 +1076,7 @@ sub add_relevant_bleats {
 sub display_search_results {
 	($search_term, $search_type) = ($_[0], $_[1]);
 	$search_term =~ s/\s{2,}/ /g; #condenses whitespace
-	$search_term =~ s/(\||\\|\.\.|\/)//g; #sanitises search phrase
+	$search_term =~ s/\||\\|\.\.|\///g; #sanitises search phrase
 	my $search = $search_term;
 	encode_output($search_term);
 	$displayed_up_to = param('num_displayed') || 0;
@@ -1162,7 +1163,7 @@ sub find_user_results {
 
 			#obtains full name of user
 			foreach $line (<USER>) {
-				$full_name = $1 if ($line =~ /^full_name: (.+)/i);
+				$full_name = $1 if $line =~ /^full_name: (.+)/i;
 			}
 
 			close USER;
@@ -1370,7 +1371,7 @@ sub update_user_details {
 	sanitise_details("home_suburb", $suburb, 50);
 	sanitise_details("home_latitude", $lat, 10);
 	sanitise_details("home_longitude", $long, 10);
-	sanitise_details("about_me", $about, 142);
+	sanitise_details("about_me", $about, 256);
 
 	#sanitises profile text by escaping all but safe html metacharacters
 	if (@new_details && $new_details[$#new_details] =~ /^about/) {
@@ -1396,7 +1397,7 @@ sub update_user_details {
 	display_user_profile("$users_dir/$user");
 }
 
-#sanitises and pushes to data collection the input given user details
+#sanitises and pushes to data collection the given user details
 sub sanitise_details {
 	my ($field_name, $data, $max_length) = @_;
 	$data = substr($data, 0, $max_length); #limits length of data
