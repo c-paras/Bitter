@@ -84,9 +84,6 @@ if (defined $token) {
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('settings')) {
 			print "<font color=\"red\">This page is a placeholder.</font>\n";
-		} elsif (defined param('search_phrase') && defined param('search_type')) {
-			display_page_banner(param('search_phrase'), param('search_type'));
-			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('bleat_to_send')) {
 			add_bleat($current_user[0], param('bleat_to_send'));
 			display_page_banner();
@@ -109,11 +106,14 @@ if (defined $token) {
 				display_search_results(param('search_phrase'), param('search_type'));
 			}
 
+		} elsif (defined param('listen')) {
+			listen_to_user(param('listen'), $current_user[0], param('previous_page'));
+		} elsif (defined param('search_phrase') && defined param('search_type')) {
+			display_page_banner(param('search_phrase'), param('search_type'));
+			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('profile_to_view')) {
 			display_page_banner();
 			display_user_profile(param('profile_to_view'));
-		} elsif (defined param('listen') && defined param('previous_page')) {
-			listen_to_user(param('listen'), $current_user[0], param('previous_page'));
 		} elsif (defined param('next') && defined param('profile_in_view')) {
 			display_page_banner();
 			display_user_profile(param('profile_in_view'));
@@ -166,9 +166,13 @@ eof
 	print_page_header();
 	create_account_form();
 } elsif (defined param('create')) {
-	#creates an account for a new user
+	#authenticates user email before creating an account
 	print_page_header();
 	validate_account_creation(param('full_name'), param('username'), param('email'), param('new_password'), param('confirm_password'));
+} elsif (defined param('new_account') && defined param('username')) {
+	#creates an account for a new user
+	print_page_header();
+	create_account(param('new_account'), param('username'));
 } elsif (defined param('email')) {
 	#allows user to reset password
 	print_page_header();
@@ -289,7 +293,7 @@ sub reset_password {
 			close TOKEN;
 
 			#sends email for verification
-			open MAIL, "|-", "mail -s 'Reset Bitter Password' '\Q$email\E'" or die "Cannot run mail: $!";
+			open MAIL, "|-", "mail -s 'Reset Bitter Password' \Q$email\E" or die "Cannot run mail: $!";
 			my $reset_url = "$ENV{SCRIPT_URI}?reset_password=$unique_rnd&username=$username";
 			print MAIL "Copy and paste this link into your browser to reset your password: $reset_url";
 			close MAIL;
@@ -365,12 +369,21 @@ sub change_password {
 	} elsif (length($new_password) > 16) {
 		my $warning = "New password can be at most 16 characters long.";
 		reset_password_form($unique_id, $username, $warning);
+	} elsif ($new_password !~ /\d/ || $new_password !~ /[a-z]/i) {
+		my $warning = "New password must contain numbers and letters.";
+		reset_password_form($unique_id, $username, $warning);
 	} elsif ($new_password eq $current_password) {
 		my $warning = "New password must differ from current password.";
 		reset_password_form($unique_id, $username, $warning);
-	} elsif ($new_password !~ /\d/ || $new_password !~ /[a-z]/i) {
-		my $warning = "New password must contain numbers and letters.";
-		reset_password_form($unique_id, $username, $warning);		
+	} elsif (lc $new_password eq lc $username) {
+		my $warning = "New password cannot be your username.";
+		reset_password_form($unique_id, $username, $warning);
+	} elsif ($new_password =~ /$username/i) {
+		my $warning = "New password must not contain your username.";
+		reset_password_form($unique_id, $username, $warning);
+	} elsif ($username =~ /\Q$new_password\E/i) {
+		my $warning = "New password must not be part of your username.";
+		reset_password_form($unique_id, $username, $warning);
 	} else {
 		#writes out user information with new password
 		push @user_data, "password: $new_password";
@@ -384,6 +397,13 @@ sub change_password {
 			unlink "$token_file" or die "Cannot remove $token_file: $!";
 		}
 		display_login_page();
+		print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Your password has been changed.");
+  }
+</script>
+eof
 	}
 
 }
@@ -484,13 +504,19 @@ sub validate_account_creation {
 		$warnings .= "Error: Password can be at most 16 characters long.<br>\n";
 	} elsif ($password !~ /\d/ || $password !~ /[a-z]/i) {
 		$warnings .= "Error: Password must contain numbers and letters.<br>\n";
+	} elsif (lc $password eq lc $username) {
+		$warnings .= "New password cannot be your username.";
+	} elsif ($password =~ /$username/i) {
+		$warnings .= "New password must not contain your username.";
+	} elsif ($username =~ /\Q$password\E/i) {
+		$warnings .= "New password must not be part of your username.";
 	}
 
 	#reloads account creation form if invalid parameters supplied
 	if ($warnings ne "") {
 		create_account_form($full_name, $username, $email, $warnings);
 	} else {
-		confirm_account_creation();
+		confirm_account_creation($full_name, $username, $email, $password, $confirm);
 	}
 
 }
@@ -516,18 +542,73 @@ sub email_exists {
 	return 0;
 }
 
-#validates provided email for account creation
+#validates provided email for account creation by sending confirmation code
 sub confirm_account_creation {
 	my ($full_name, $username, $email, $password, $confirm) = @_;
+	my $unique_rnd = md5_hex(time() + $$);
+	chomp $unique_rnd;
 
-	#display js msg to check email and display login page	
+	#stores token file in direcotry along with user details
+	$token_file = "tokens/$unique_rnd-$username";
+	mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
+	open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
+	print TOKEN <<eof;
+full_name: $full_name
+username: $username
+email: $email
+password: $password
+listens: 
+eof
+	close TOKEN;
+
+	#sends email for verification
+	open MAIL, "|-", "mail -s 'Bitter Account Creation' \Q$email\E" or die "Cannot run mail: $!";
+	my $account_url = "$ENV{SCRIPT_URI}?new_account=$unique_rnd&username=$username";
+	print MAIL "Copy and paste this link into your browser to complete account creation: $account_url";
+	close MAIL;
+
+	#outputs login page with alert of incomming email
+	display_login_page();
+	print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("You will recieve an email to complete account creation shortly.");
+  }
+</script>
+eof
 }
 
 #creates an account for a new user
 sub create_account {
-	my ($full_name, $username, $email, $password, $confirm) = @_;
+	my ($account_rnd, $username) = @_;
+	my $new_account_info = "tokens/$account_rnd-$username";
 
-	#create account and navigate to user profile
+	#aborts if invalid confirmation id provided
+	if (! -e $new_account_info) {
+		display_login_page();
+		return;
+	}
+
+	#creates a new directory for the user and inserts user details
+	my $user_directory = "$users_dir/$username";
+	mkdir $user_directory or die "Cannot create $user_directory: $!";
+	my $user_details = "$user_directory/details.txt";
+	rename $new_account_info, $user_details or die "Cannot move $new_account_info to $user_details: $!";
+
+	#creates an empty bleats collection for the new user
+	$bleats_file = "$user_directory/bleats.txt";
+	open BLEATS, ">", $bleats_file or die "Cannot create $bleats_file: $!";
+	close BLEATS;
+
+	#navigates to login page and prompts user to log in
+	display_login_page();
+	print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Your account is now active. Please log in to start using Bitter!");
+  }
+</script>
+eof
 }
 
 #displays error message and prompts for re-authentication
@@ -548,6 +629,7 @@ sub display_page_banner {
 	encode_output($search_phrase);
 	my $type = $_[1] || '';
 	print <<eof;
+<center>
 <form method="POST" action="">
   <table>
     <tr>
@@ -582,6 +664,7 @@ eof
   </script>
 
 </form>
+</center>
 <p>
 eof
 }
@@ -627,6 +710,7 @@ sub user_details {
 	my $listen_option = $_[2] || '';
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = my $about = "Unknown";
+	$listens_to_display = $listens = "None";
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
@@ -679,7 +763,12 @@ eof
 </div>
 eof
 	} else {
-		$details .= "\n</div>\n";
+		$details .= '<form method="POST" action="">';
+		$details .= append_options($user, 0, $current_user[0], $user);
+		$details .= <<eof;
+</form>
+</div>
+eof
 	}
 
 	return $details;
@@ -744,10 +833,18 @@ sub append_options {
 	$current_page = "profile" if $current_user ne $user_being_viewed;
 
 	#constructs form with reply button, listen button and relevant hidden fields
-	my $form_to_return = <<eof;
+	my $form_to_return = "";
+	if ($bleat_id != 0) {
+		$form_to_return = <<eof;
 
 <input type="button" name="reply" value="Reply to $bleater" onclick="reply_field($bleat_id);" class="bitter_button"> <input type="submit" name="listen" value="$type $bleater" class="bitter_button"><input type="hidden" name="previous_page" value="$current_page"><input type="hidden" name="num_displayed" value="$display_offset">
 eof
+	} else {
+		$form_to_return = <<eof;
+
+<input type="submit" name="listen" value="$type $bleater" class="bitter_button"><input type="hidden" name="previous_page" value="$current_page"><input type="hidden" name="num_displayed" value="$display_offset">
+eof
+	}
 
 	#appends search info to form if available
 	if (defined $search_term) {
@@ -813,7 +910,7 @@ sub user_bleats {
 	push @user_bleats, <BLEATS>;
 	close BLEATS;
 
-	#returns bleats of user listened to by logged in user
+	#returns bleats of users listened to by logged in user
 	if ($show_relevant eq "-supress_recursion") {
 		foreach $bleat (@bleats) {
 			push @bleats_of_listner, $bleat if grep(/^$bleat$/, @user_bleats);
@@ -825,6 +922,7 @@ sub user_bleats {
 	my $user = $bleats_filename;
 	add_relevant_bleats($user, @bleats) if $show_relevant ne '';
 	my $bleats_to_display = format_bleats($user, @user_bleats);
+	return "No bleats to display\n" if $bleats_to_display eq "";
 
 	#ensures same page is viewed if reply is made
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
@@ -856,7 +954,8 @@ eof
 eof
 
 	#appends form for viewing the next 16 bleats
-	$bleats_to_display .= <<eof;
+	if ($num_unique_bleats > 16) {
+		$bleats_to_display .= <<eof;
 
 <div align="right">
   <form method="POST" action="">
@@ -866,6 +965,7 @@ eof
   </form>
 </div>
 eof
+	}
 
 	return $bleats_to_display;
 }
@@ -874,14 +974,19 @@ eof
 sub format_bleats {
 	my ($user, @user_bleats) = @_;
 	my $bleats_to_display = "";
-	@user_bleats = reverse(sort(@user_bleats)); #reverse chronologically sorts bleats
-	$display_up_to = $#user_bleats + 1 if $#user_bleats < 16;
+	chomp $_ foreach @user_bleats;
+	$unique_bleats{$_} = 1 foreach @user_bleats;
+	my @unique_bleats = keys %unique_bleats;
+	@user_bleats = reverse(sort(@unique_bleats)); #reverse chronologically sorts bleats
+	$num_unique_bleats = $#user_bleats + 1;
+	$display_up_to = $num_unique_bleats if $#user_bleats < 16;
+	return $bleats_to_display if $#user_bleats < 0;
 
 	#appends user's bleats to a string in formatted way
 	for $i ($displayed_up_to..$display_up_to - 1) {
 
 		#obtains and reads relevant bleat
-		my $bleat = $user_bleats[$i % $#user_bleats]; #wraps to start of bleats
+		my $bleat = $user_bleats[$i % ($#user_bleats + 1)]; #wraps to start of bleats
 		$bleat =~ s/\D//g;
 		my $bleat_file = "$bleats_dir/$bleat";
 		open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
@@ -1009,11 +1114,11 @@ sub delete_bleat {
 
 	#sets an array contaning all but the deleted bleat
 	my $user_bleats = "$users_dir/$current_user/bleats.txt";
-	open USER, "<", $user_bleats or die "Cannot open $user_bleats: $!";
-	while (<USER>) {
-		push @new_bleats, $_ if $_ !~ /$bleat_id/;
+	open BLEATS, "<", $user_bleats or die "Cannot open $user_bleats: $!";
+	while (<BLEATS>) {
+		push @new_bleats, $_ if $_ !~ /^$bleat_id/;
 	}
-	close USER;
+	close BLEATS;
 
 	#writes out new set of sent bleats
 	open BLEATS, ">", $user_bleats or die "Cannot write $user_bleats: $!";
@@ -1345,7 +1450,7 @@ sub update_details {
     <td><textarea name="about_me" onkeydown="auto_submit(event);" style="width: 250px; height: 100px; resize: none;">$about</textarea></td>
   </tr>
   <tr><td></td><td style="text-align: right;">
-    <input type="button" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
+    <input type="submit" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
     <input type="submit" name="cancel_update" value="Cancel" class="bitter_button">
   </td></tr>
 </table>
