@@ -84,7 +84,7 @@ if (defined $token) {
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('settings')) {
 			print "<font color=\"red\">This page is a placeholder.</font>\n";
-		} elsif (defined param('search') || defined param('more')) {
+		} elsif (defined param('search_phrase') && defined param('search_type')) {
 			display_page_banner(param('search_phrase'), param('search_type'));
 			display_search_results(param('search_phrase'), param('search_type'));
 		} elsif (defined param('bleat_to_send')) {
@@ -112,9 +112,9 @@ if (defined $token) {
 		} elsif (defined param('profile_to_view')) {
 			display_page_banner();
 			display_user_profile(param('profile_to_view'));
-		} elsif (defined param('listen')) {
+		} elsif (defined param('listen') && defined param('previous_page')) {
 			listen_to_user(param('listen'), $current_user[0], param('previous_page'));
-		} elsif (defined param('next')) {
+		} elsif (defined param('next') && defined param('profile_in_view')) {
 			display_page_banner();
 			display_user_profile(param('profile_in_view'));
 		} elsif (defined param('update')) {
@@ -123,7 +123,7 @@ if (defined $token) {
 		} elsif (defined param('cancel_update')) {
 			display_page_banner();
 			display_user_profile("$users_dir/$current_user[0]");
-		} elsif (defined param('suburb')) {
+		} elsif (defined param('suburb') && defined param('lat') && defined param('long') && defined param('about_me')) {
 			display_page_banner();
 			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
 		} else {
@@ -161,11 +161,20 @@ eof
 		print_page_header();
 		wrong_credentials_page();
 	}
+} elsif (defined param('create_account')) {
+	#navigates to form for creating an account
+	print_page_header();
+	create_account_form();
+} elsif (defined param('create')) {
+	#creates an account for a new user
+	print_page_header();
+	validate_account_creation(param('full_name'), param('username'), param('email'), param('new_password'), param('confirm_password'));
 } elsif (defined param('email')) {
 	#allows user to reset password
 	print_page_header();
 	reset_password(param('email'));
 } elsif (defined param('reset_password') && defined param('username')) {
+	#navigates to form for restting password
 	print_page_header();
 	reset_password_form(param('reset_password'), param('username'));
 } elsif (defined param('change_password')) {
@@ -227,12 +236,17 @@ sub display_login_page {
     <input type="button" name="reset" value="Reset password" onclick="reset_password();" class="bitter_button">
     <input type="hidden" name="email" id="email">
   </form>
+
+  <form method="POST" action="">
+    <input type="submit" name="create_account" value="Create account" class="bitter_button">
+  </form>
 </center>
 
 <script type="text/javascript">
   function reset_password() {
     var result = prompt("Enter your email:");
-    if (result.match(/^\\s*\$/) === null && result.match(/@/)) {
+    result = result.replace(/\\s/g, "");
+    if (result != "" && result.match(/.+@.+/)) {
       result = result.replace(/[^$valid_email_chars]/g, '');
       document.getElementById("email").value = result;
       alert("If the email you provided is linked to an account, you will recieve an email with instructions shortly.");
@@ -371,6 +385,148 @@ sub change_password {
 		display_login_page();
 	}
 
+}
+
+#provides a user form for account creation
+sub create_account_form {
+	my $full_name = $_[0] || '';
+	my $username = $_[1] || '';
+	my $email = $_[2] || '';
+	my $warnings = $_[3] || '';
+
+	print <<eof;
+<div class="bitter_heading">Welcome to Bitter</div>
+<center>
+  <div class="bitter_subheading">Create Bitter Account</div>
+  <p>
+  <font color="red">$warnings</font>
+  <form method="POST" action="">
+    <table cellpadding="2">
+      <tr><td><b>Full name:</b></td><tr>
+      <tr><td><input type="text" name="full_name" value="$full_name" class="bitter_textfield"></td></tr>
+      <tr><td></td></tr>
+      <tr><td></td></tr>
+      <tr><td><b>Username:</b></td><tr>
+      <tr><td><input type="text" name="username" value="$username" class="bitter_textfield"></td></tr>
+      <tr><td></td></tr>
+      <tr><td></td></tr>
+      <tr><td><b>Email:</b></td><tr>
+      <tr><td><input type="text" name="email" value="$email" class="bitter_textfield"></td></tr>
+      <tr><td></td></tr>
+      <tr><td></td></tr>
+      <tr><td><b>Password:</b></td><tr>
+      <tr><td><input type="password" name="new_password" class="bitter_textfield"></td></tr>
+      <tr><td></td></tr>
+      <tr><td></td></tr>
+      <tr><td><b>Confirm password:</b></td></tr>
+      <tr><td><input type="password" name="confirm_password" class="bitter_textfield"></td></tr>
+    </table>
+    <p>
+    <input type="submit" name="create" value="Create account" class="bitter_button">
+  </form>
+</center>
+eof
+}
+
+#checks for valid account creation parameters
+sub validate_account_creation {
+	my ($full_name, $username, $email, $password, $confirm) = @_;
+	my $warnings = "";
+
+	#sanitises input parameters
+	$full_name = substr($full_name, 0, 142);
+	$email = substr($email, 0, 168);
+	$full_name =~ s/\<|\>|\.\.//g;
+
+	#andrewt's valid email regex
+	my $valid_email_chars = '\w\.\@\-\!\#\$\%\&\'\*\+\-\/\=\?\^_\`\{\|\}\~';
+
+	#validates full name
+	if ($full_name =~ /^\s*$/) {
+		$warnings .= "Error: Full name is required.<br>\n";
+		$full_name = "";
+	}
+
+	#validates and sanitises username
+	if ($username =~ /^\s*$/) {
+		$warnings .= "Error: Username is required.<br>\n";
+		$username = "";
+	} elsif ($username =~ /[^a-z0-9]/i) {
+		$warnings .= "Error: Username can only contain numbers and letters.<br>\n";
+		$username =~ s/[^a-z0-9]//gi;
+	} elsif (length($username) < 6 || length($username) > 20) {
+		$warnings .= "Error: Username must be between 6 and 20 characters long.<br>\n";
+		$username = substr($username, 0, 20);
+	} elsif (-e "$users_dir/$username") {
+		$warnings .= "Error: An account with this username exists.<br>\n";
+		$username = "";
+	}
+
+	#validates and sanitises email
+	if ($email =~ /^\s*$/) {
+		$warnings .= "Error: Email is required.<br>\n";
+		$email = "";
+	} elsif ($email =~ /[^$valid_email_chars]/ || $email !~ /.+\@.+/) {
+		$warnings .= "Error: Email is not valid.<br>\n";
+		$email =~ s/[^$valid_email_chars]//g;
+	} elsif (email_exists($email)) {
+		$warnings .= "Error: Email is associated with an existing account.<br>\n";
+		$email = "";
+	}
+
+        #validates password fields
+	if ($password ne $confirm) {
+		$warnings .= "Error: Passwords do not match.<br>\n";
+	} elsif (length($password) < 8) {
+		$warnings .= "Error: Password must contain at least 8 characters.<br>\n";
+	} elsif (length($password) > 16) {
+		$warnings .= "Error: Password can be at most 16 characters long.<br>\n";
+	} elsif ($password !~ /\d/ || $password !~ /[a-z]/i) {
+		$warnings .= "Error: Password must contain numbers and letters.<br>\n";
+	}
+
+	#reloads account creation form if invalid parameters supplied
+	if ($warnings ne "") {
+		create_account_form($full_name, $username, $email, $warnings);
+	} else {
+		confirm_account_creation();
+	}
+
+}
+
+#checks if a user with the provided email exists
+sub email_exists {
+	my $email = $_[0];
+	my @users = glob("$users_dir/*/details.txt");
+
+	#checks every user's emails
+	foreach $user (@users) {
+		open USER, "<", $user or die "Cannot open $user: $!";
+
+		#finds email for current user
+		while (<USER>) {
+			$email_exists = 1 if $_ =~ /^email: \Q$email\E$/;
+		}
+
+		close USER;
+		return 1 if $email_exists;
+	}
+
+	return 0;
+}
+
+#validates provided email for account creation
+sub confirm_account_creation {
+	my ($full_name, $username, $email, $password, $confirm) = @_;
+
+	#display js msg to check email and display login page	
+}
+
+#creates an account for a new user
+sub create_account {
+	my ($full_name, $username, $email, $password, $confirm) = @_;
+
+	#create account and navigate to user profile
 }
 
 #displays error message and prompts for re-authentication
@@ -659,7 +815,7 @@ sub user_bleats {
 	#returns bleats of user listened to by logged in user
 	if ($show_relevant eq "-supress_recursion") {
 		foreach $bleat (@bleats) {
-				push @bleats_of_listner, $bleat if grep(/^$bleat$/, @user_bleats);
+			push @bleats_of_listner, $bleat if grep(/^$bleat$/, @user_bleats);
 		}
 		return @bleats_of_listner;
 	}
