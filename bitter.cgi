@@ -141,6 +141,8 @@ if (defined $token) {
 		} elsif (defined param('remove_profile_image')) {
 			display_page_banner();
 			remove_profile_image("$users_dir/$current_user[0]");
+		} elsif (defined param('admin_operation') && param('admin_operation') eq "suspend") {
+			suspend_user_account($current_user[0]);
 		} else {
 			display_login_page();
 		}
@@ -265,7 +267,7 @@ sub display_login_page {
   function reset_password() {
     var result = prompt("Enter your email:");
     result = result.replace(/\\s/g, "");
-    if (result != "" && result.match(/.+@.+/)) {
+    if (result !== "" && result.match(/.+@.+/)) {
       result = result.replace(/[^$valid_email_chars]/g, '');
       document.getElementById("email").value = result;
       alert("If the email you provided is linked to an account, you will recieve an email with instructions shortly.");
@@ -724,9 +726,11 @@ sub display_user_profile {
 		print user_bleats($bleats_filename, -display_relevant => "true");
 	} else {
 		#prints listen/unlisten option if user_to_show != current_user
-		print user_details($details_filename, $image_filename, $current_user[0]);
-		print "</td></tr></table>\n<br>\n";
-		print user_bleats($bleats_filename);
+		my $profile = user_details($details_filename, $image_filename, $current_user[0]);
+		print "$profile\n</td></tr></table>\n<br>\n";
+		if ($profile ne "You do not have access to view this account.") {
+			print user_bleats($bleats_filename);
+		}
 	}
 
 }
@@ -741,6 +745,7 @@ sub user_details {
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
+		$suspended_account = 1 if $line =~ /^suspended_account: true/;
 		$name = $1 if $line =~ /^full_name: (.+)/;
 		$user = $1 if $line =~ /^username: (.+)/;
 		$location = $1 if $line =~ /^home_suburb: (.+)/;
@@ -762,6 +767,17 @@ sub user_details {
 
 	close DETAILS;
 
+	#gets currently logged in user
+	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
+	$current_user[0] = param('username') if param('username');
+
+	#handles suspended accounts
+	if ($suspended_account == 1 && $current_user[0] ne $user) {
+		return "You do not have access to view this account.";
+	} elsif ($suspended_account == 1) {
+		reactivate_account($current_user[0]);
+	}
+
 	#appends user details to profile box
 	my $details = <<eof;
 <div class="bitter_block">
@@ -776,10 +792,6 @@ sub user_details {
 <b>Listens:</b> $listens_to_display
 <b>About Me:</b> $about
 eof
-
-	#gets currently logged in user
-	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-	$current_user[0] = param('username') if param('username');
 
 	#appends option to update account details if profile is that of current user
 	if ($user eq $current_user[0]) {
@@ -1801,8 +1813,9 @@ sub change_account_settings_form {
   <p>
 
   <form id="admin_form" method="POST" action="">
-    <input type="submit" name="suspend_account" value="Suspend Account" class="bitter_button">
-    <input type="submit" name="delete_account" value="Delete Account" class="bitter_button">
+    <input type="button" name="suspend_account" value="Suspend Account" onclick="suspend_account_confirmation();" class="bitter_button">
+    <input type="button" name="delete_account" value="Delete Account" class="bitter_button">
+    <input type="hidden" name="admin_operation" id="admin_operation">
   </form>
 </center>
 
@@ -1814,6 +1827,14 @@ sub change_account_settings_form {
   function auto_submit(e) {
     if (e.keyCode === 13) {
       document.getElementById("account_info_form").submit();
+    }
+  }
+
+  function suspend_account_confirmation() {
+    var response = confirm("This will hide your profile from other Bitter users.\\nYour previous bleats will remain visible to others.\\nYou can reactivate your account automatically by logging in at any time.");
+    if (response === true) {
+      document.getElementById("admin_operation").value = "suspend";
+      document.getElementById("admin_form").submit();
     }
   }
 </script>
@@ -1855,6 +1876,48 @@ sub change_account_settings {
   }
 </script>
 eof
+}
+
+#temporarily blocks access to the current user profile
+sub suspend_user_account {
+	my $username = $_[0];
+	my $details_filename = "$users_dir/$username/details.txt";
+	open DETAILS, ">>", $details_filename or die "Cannot write $details_filename: $!";
+	print DETAILS "suspended_account: true\n";
+	close DETAILS;
+
+	#revokes unqiue token for the current session
+	my $token_file = "tokens/$token";
+	if (-e $token_file) {
+		unlink $token_file or die "Cannot remove $token_file: $!";
+	}
+
+	display_login_page();
+	print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Your account has been suspended, as requested.");
+  }
+</script>
+eof
+}
+
+#removes the suspended account flag from the current user's details file
+sub reactivate_account {
+	my $username = $_[0];
+	my $details_filename = "$users_dir/$username/details.txt";
+
+	#copies user details except for the suspended account flag
+	open DETAILS, "<", $details_filename or die "Cannot read $details_filename: $!";
+	while (<DETAILS>) {
+		push @user_details, $_ if $_ !~ /^suspended_account: true/;
+	}
+	close DETAILS;
+
+	#writes out user details
+	open DETAILS, ">", $details_filename or die "Cannot write $details_filename: $!";
+	print DETAILS @user_details;
+	close DETAILS;
 }
 
 #sanitises and pushes to data collection the given user details
