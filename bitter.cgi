@@ -1031,8 +1031,16 @@ username: $current_user
 bleat: $bleat_to_send
 time: $unix_time
 eof
-	print BLEAT "in_reply_to: $in_reply_to\n" if $in_reply_to =~ /^\d{10,}$/;
+
+	#appends reply_to field to bleat if present and notifies original bleater
+	encode_output($bleat_to_send);
+	if ($in_reply_to =~ /^\d{10,}$/) {
+		print BLEAT "in_reply_to: $in_reply_to\n";
+		send_email_about_reply($current_user, $in_reply_to, $bleat_to_send);
+	}
+
 	close BLEAT;
+	send_email_about_mention($current_user, $bleat_to_send);
 
 	#prints javascript to invoke an alert, indicating that bleating was successful
 	print <<eof;
@@ -1043,6 +1051,68 @@ eof
 </script>
 
 eof
+}
+
+#notifies user that just got a reply by email if the preference is enabled
+sub send_email_about_reply {
+	my ($current_user, $original_bleat_id, $bleat) = @_;
+	my $bleat_filename = "$bleats_dir/$original_bleat_id";
+
+	#finds bleater of original bleat
+	open BLEAT, "<", $bleat_filename or die "Cannot open $bleat_filename: $!";
+	while (<BLEAT>) {
+		$replied_to_user = $1 if $_ =~ /^username: (.+)/;
+	}
+	close BLEAT;
+	my $details_filename = "$users_dir/$replied_to_user/details.txt";
+
+	#aborts if user has opted not to receive notifications
+	open USER, "<", $details_filename or die "Cannot open $details_filename: $!";
+	while (<USER>) {
+		close USER and return if $_ =~ /^reply_notify: false/;
+		$email = $1 if $_ =~ /^email: (.+)/;
+	}
+
+	close USER;
+
+	#sends email to user that received the reply
+	open MAIL, "|-", "mail -s 'New Bitter Reply' \Q$email\E" or die "Cannot run mail: $!";
+	print MAIL "$current_user bleated \"$bleat\" in reply to a bleat you made on Bitter.";
+	close MAIL;
+}
+
+#notifies users that got mentioned in a bleat if the preference is enabled
+sub send_email_about_mention {
+	my ($current_user, $bleat) = @_;
+	my @all_users = glob("$users_dir/*");
+
+	#checks whether bleat mentions any user
+	foreach $user (@all_users) {
+		my $user_to_check = $user;
+		$user_to_check =~ s/^.*\///;
+		next if $user_to_check eq $current_user;
+		next if $replied_to_user && $user_to_check eq $replied_to_user;
+
+		if ($bleat =~ /$user_to_check/i) {
+			my $abort_sending = 0;
+
+			#aborts if user has opted not to receive notifications
+			my $details_filename = "$user/details.txt";
+			open USER, "<", $details_filename or die "Cannot open $details_filename: $!";
+			while (<USER>) {
+				$abort_sending = 1 if $_ =~ /^mention_notify: false/;
+				$email = $1 if $_ =~ /^email: (.+)/;
+			}
+		        close USER;
+			next if $abort_sending == 1;
+
+			#sends email to user that got mentioned
+			open MAIL, "|-", "mail -s 'New Bitter Bleat' \Q$email\E" or die "Cannot run mail: $!";
+			print MAIL "$current_user bleated \"$bleat\" on Bitter.";
+			close MAIL;
+
+		}
+	}
 }
 
 #obtains a user's bleats
@@ -1550,6 +1620,8 @@ sub listen_to_user {
 		open USER, ">", $user_profile or die "Cannot write $user_profile: $!";
 		print USER @lines;
 		close USER;
+
+		send_email_about_listen($user_to_update, $current_user);
 	}
 
 	#displays search results page if applicable
@@ -1560,6 +1632,26 @@ sub listen_to_user {
 
 	display_user_profile("$users_dir/$user_to_update") if $previous_page eq "profile";
 	display_user_profile("$users_dir/$current_user") if $previous_page eq "home";
+}
+
+#notifies user that just got listened to by email if the preference is enabled
+sub send_email_about_listen {
+	my ($listened_user, $current_user) = @_;
+	my $details_filename = "$users_dir/$listened_user/details.txt";
+
+	#aborts if user has opted not to receive notifications
+	open USER, "<", $details_filename or die "Cannot open $details_filename: $!";
+	while (<USER>) {
+		close USER and return if $_ =~ /^listen_notify: false/;
+		$email = $1 if $_ =~ /^email: (.+)/;
+	}
+
+	close USER;
+
+	#sends email to listened user
+	open MAIL, "|-", "mail -s 'New Bitter Listener' \Q$email\E" or die "Cannot run mail: $!";
+	print MAIL "$current_user has just started listening to you on Bitter.";
+	close MAIL;
 }
 
 #provides a form for updating user profile details
@@ -1661,12 +1753,13 @@ sub change_account_settings_form {
 	my $details_filename = "$users_dir/$current_user/details.txt";
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $full_name = my $email = "";
-	my $reply = my $listen = "checked";
+	my $reply = my $listen = my $mention = "checked";
 
 	#extracts relevant user information
 	foreach $line (<DETAILS>) {
 		$full_name = $1 if $line =~ /^full_name: (.+)/;
 		$email = $1 if $line =~ /^email: (.+)/;
+		$mention = "" if $line =~ /^mention_notify: false/;
 		$reply = "" if $line =~ /^reply_notify: false/;
 		$listen = "" if $line =~ /^listen_notify: false/;
 	}
@@ -1686,11 +1779,14 @@ sub change_account_settings_form {
     </tr>
     <tr>
       <td><b>Email:</b></td>
-      <td><input type="text" name="email" value="$email" style="width:300px;">      <input type="hidden" name="user_email" value="$email"></td>
+      <td><input type="text" name="email" value="$email" style="width:300px;"><input type="hidden" name="user_email" value="$email"></td>
     </tr>
     <tr><td></td></tr><tr><td></td></tr></table>
 
     <table><tr><td></td></tr><tr>
+      <tr>
+        <td><input type="checkbox" name="mention_notify" onclick="auto_submit();" $mention>Notify me when I get mentioned in a bleat</td>
+      </tr>
       <tr>
         <td><input type="checkbox" name="reply_notify" onclick="auto_submit();" $reply>Notify me when I get a reply to one of my bleats</td>
       </tr>
@@ -1705,7 +1801,6 @@ sub change_account_settings_form {
   <p>
 
   <form id="admin_form" method="POST" action="">
-    <input type="submit" name="change_pasword" value="Change Password" class="bitter_button">
     <input type="submit" name="suspend_account" value="Suspend Account" class="bitter_button">
     <input type="submit" name="delete_account" value="Delete Account" class="bitter_button">
   </form>
@@ -1733,7 +1828,7 @@ sub change_account_settings {
 
 	#saves all existing user information except for full name and email
 	while (<DETAILS>) {
-		if ($_ !~ /^full_name:/ && $_ !~ /^email:/ && $_ !~ /^(listen|reply)_notify:/) {
+		if ($_ !~ /^full_name:/ && $_ !~ /^email:/ && $_ !~ /^(mention|listen|reply)_notify:/) {
 			push @new_info, $_;
 		}
 	}
@@ -1744,6 +1839,7 @@ sub change_account_settings {
 	open DETAILS, ">", $details_filename or die "Cannot open $details_filename: $!";
 	push @new_info, "full_name: $full_name\n";
 	push @new_info, "email: $email\n";
+	push @new_info, "mention_notify: false\n" if !defined param('mention_notify');
 	push @new_info, "reply_notify: false\n" if !defined param('reply_notify');
 	push @new_info, "listen_notify: false\n" if !defined param('listen_notify');
 	print DETAILS $_ foreach @new_info;
