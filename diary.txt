@@ -25,3 +25,4 @@ Date		Time		Activity	Description
 24/10/2015	12:45-15:00	coding		partially implemented user account creation
 24/10/2015	15:30-21:10	coding		finished user account creation, fixed displaying of duplicate bleats, fixed layout slightly
 25/10/2015	10:30-13:50	coding		implemented changing/uploading/deleting of profile images, adding links to user profiles when vewing bleats
+25/10/2015	14:20-18:45	coding		added image border and partially implemented account settings

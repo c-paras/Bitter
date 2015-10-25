@@ -45,7 +45,7 @@ if (defined $ENV{HTTP_COOKIE} && $ENV{HTTP_COOKIE} =~ /\btoken=([\w]{30,})/) {
 				print <<eof;
 <script type="text/javascript">
   window.onload = function() {
-    alert("Authentication failed. Please log in to continue.");
+    alert("You could not be authenticated securely. Please log in to continue.");
   }
 </script>
 eof
@@ -83,7 +83,8 @@ if (defined $token) {
 			display_page_banner();
 			display_user_profile("$users_dir/".$current_user[0]);
 		} elsif (defined param('settings')) {
-			print "<font color=\"red\">This page is a placeholder.</font>\n";
+			display_page_banner();
+			change_account_settings_form($current_user[0]);
 		} elsif (defined param('bleat_to_send')) {
 			add_bleat($current_user[0], param('bleat_to_send'));
 			display_page_banner();
@@ -123,6 +124,8 @@ if (defined $token) {
 		} elsif (defined param('cancel_update')) {
 			display_page_banner();
 			display_user_profile("$users_dir/$current_user[0]");
+		} elsif (defined param('change_details')) {
+			validate_account_information(param('full_name'), $current_user[0], param('email'), '', '', $current_user[0], param('user_email'));
 		} elsif (defined param('suburb') && defined param('lat') && defined param('long') && defined param('about_me')) {
 			display_page_banner();
 			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
@@ -180,7 +183,7 @@ eof
 } elsif (defined param('create')) {
 	#authenticates user email before creating an account
 	print_page_header();
-	validate_account_creation(param('full_name'), param('username'), param('email'), param('new_password'), param('confirm_password'));
+	validate_account_information(param('full_name'), param('username'), param('email'), param('new_password'), param('confirm_password'));
 } elsif (defined param('new_account') && defined param('username')) {
 	#creates an account for a new user
 	print_page_header();
@@ -249,7 +252,7 @@ sub display_login_page {
     </table>
     <p>
     <input type="submit" name="login" value="Log In" class="bitter_button">
-    <input type="button" name="reset" value="Reset password" onclick="reset_password();" class="bitter_button">
+    <input type="button" name="reset" value="Reset Password" onclick="reset_password();" class="bitter_button">
     <input type="hidden" name="email" id="email">
   </form>
 
@@ -461,9 +464,11 @@ sub create_account_form {
 eof
 }
 
-#checks for valid account creation parameters
-sub validate_account_creation {
+#checks for valid account information parameters
+sub validate_account_information {
 	my ($full_name, $username, $email, $password, $confirm) = @_;
+	my $current_user = $_[5] || '';
+	my $current_user_email = $_[6] || '';
 	my $warnings = "";
 
 	#sanitises input parameters
@@ -490,7 +495,7 @@ sub validate_account_creation {
 	} elsif (length($username) < 6 || length($username) > 20) {
 		$warnings .= "Error: Username must be between 6 and 20 characters long.<br>\n";
 		$username = substr($username, 0, 20);
-	} elsif (-e "$users_dir/$username") {
+	} elsif (-e "$users_dir/$username" && $username ne $current_user) {
 		$warnings .= "Error: An account with this username exists.<br>\n";
 		$username = "";
 	}
@@ -502,9 +507,19 @@ sub validate_account_creation {
 	} elsif ($email =~ /[^$valid_email_chars]/ || $email !~ /.+\@.+/) {
 		$warnings .= "Error: Email is not valid.<br>\n";
 		$email =~ s/[^$valid_email_chars]//g;
-	} elsif (email_exists($email)) {
+	} elsif (email_exists($email) && $email ne $current_user_email) {
 		$warnings .= "Error: Email is associated with an existing account.<br>\n";
 		$email = "";
+	}
+
+	#navigates to account settings if function is called in change of settings context
+	if ($current_user ne '' && $warnings ne '') {
+		display_page_banner();
+		change_account_settings_form($current_user, $warnings);
+		return;
+	} elsif ($current_user ne '' && $warnings eq '') {
+		change_account_settings($current_user, $full_name, $email);
+		return;
 	}
 
 	#validates password fields
@@ -662,7 +677,7 @@ eof
 	print <<eof;
         </select>
         <input type="submit" name="search" id="search" value="Search" class="bitter_button">
-        <input type="submit" name="logout" value="Log Out" class="bitter_button">
+        <input type="submit" name="logout" id="logout" value="Log Out" class="bitter_button">
       </td>
     </tr>
   </table>
@@ -696,7 +711,7 @@ sub display_user_profile {
 
 	#finds currently logged-in user
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-	$current_user[0] = param('username') if !$current_user[0];
+	$current_user[0] = param('username') if param('username');
 	$user_to_show =~ s/$users_dir\///;
 
 	print '<table cellpadding="8" align="left"><tr><td>', "\n";
@@ -752,7 +767,7 @@ sub user_details {
 <div class="bitter_block">
   <b><font size="10">$name</font></b>
 
-<img src="$image_filename" alt="$user profile image" style="center: parent;">
+<img src="$image_filename" alt="$user profile image" style="center: parent; border: 1px solid black;">
 
 <b>Username:</b> $user
 <b>Suburb:</b> $location
@@ -764,7 +779,7 @@ eof
 
 	#gets currently logged in user
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-	$current_user[0] = param('username') if !$current_user[0];
+	$current_user[0] = param('username') if param('username');
 
 	#appends option to update account details if profile is that of current user
 	if ($user eq $current_user[0]) {
@@ -795,7 +810,7 @@ sub bleat_block {
 	return <<eof;
 </td><tr><td>
 <div class="bleat_block">
-<b>Send a new bleat:</b><form id="bleat_form" method="POST" action="">
+<b>Send a New Bleat:</b><form id="bleat_form" method="POST" action="">
 <textarea name="bleat_to_send" id="bleat_to_send" onkeydown="auto_submit(event);" style="width: 100%; height: 200px; resize: none;"></textarea>
 <input type="button" name="send_bleat" id="send_bleat" value="Send Bleat" onclick="create_bleat();" class="bitter_button">
 <input type="hidden" name="num_displayed" value="$display_offset"></form>
@@ -834,8 +849,9 @@ sub profile_image_form {
 	#prints out the user form and an image preview
 	print <<eof;
 <center>
-  <b>Preview:</b><p>
-  <img id="image_preview" src="$image_filename" alt="$username profile image">
+  <div class="bitter_subheading">Preview</div>
+  <p>
+  <img id="image_preview" src="$image_filename" alt="$username profile image" style="border: 1px solid black;">
   <form id="change_profile_image" method="POST" action="">
     <table>
       <tr><td>
@@ -1058,7 +1074,7 @@ sub user_bleats {
 
 	#ensures same page is viewed if reply is made
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-	$current_user[0] = param('username') if !$current_user[0];
+	$current_user[0] = param('username') if param('username');
 	$display_offset = $display_up_to - 15 if $user eq $current_user[0];
 	$display_offset = 0 if $user eq $current_user[0] && $display_up_to == 16;
 	$display_offset = $display_up_to - 16 if $user ne $current_user[0];
@@ -1091,7 +1107,7 @@ eof
 
 <div align="right">
   <form method="POST" action="">
-    <input type="submit" name="next" value="Show more bleats" class="bitter_button">
+    <input type="submit" name="next" value="Show More Bleats" class="bitter_button">
     <input type="hidden" name="num_displayed" value="$display_up_to">
     <input type="hidden" name="profile_in_view" value="$users_dir/$user">
   </form>
@@ -1169,7 +1185,7 @@ sub format_bleats {
 		$bleats_to_display .= "\n<b>Latitude:</b> $latitude\n" if $latitude;
 		$bleats_to_display .= "<b>Longitude:</b> $longitude" if $longitude;
 		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-		$current_user[0] = param('username') if !$current_user[0];
+		$current_user[0] = param('username') if param('username');
 
 		#appends options to reply, listen/unlisten and delete bleat where appropriate
 		$bleats_to_display .= '<form method="POST" action="">';
@@ -1232,7 +1248,7 @@ sub delete_bleat_option {
 	#sets up delete button and javascript to confirm deletion
 	my $form_to_return = <<eof;
 
-<input type="button" name="delete_bleat" value="Delete this bleat" onclick="confirm_deletion($bleat_id);" class="bitter_button">
+<input type="button" name="delete_bleat" value="Delete This Bleat" onclick="confirm_deletion($bleat_id);" class="bitter_button">
 eof
 
 	return $form_to_return;
@@ -1334,7 +1350,7 @@ sub display_search_results {
 	#dispays results which matched $search or a message that no results were found
 	if (@bleat_matches) {
 		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
-		$current_user[0] = param('username') if !$current_user[0];
+		$current_user[0] = param('username') if param('username');
 		print "<b>Found $i bleat matching \"$search_term\":</b>\n" if $i == 1;
 		print "<b>Found $i bleats matching \"$search_term\":</b>\n" if $i > 1;
 		print format_bleats($current_user[0], @bleat_matches);
@@ -1373,7 +1389,7 @@ eof
 
 <div align="center">
   <form method="POST" action="">
-    <input type="submit" name="more" value="Show more results" class="bitter_button">
+    <input type="submit" name="more" value="Show More Results" class="bitter_button">
     <input type="hidden" name="num_displayed" value="$display_up_to">
     <input type="hidden" name="search_phrase" value="$search_term">
     <input type="hidden" name="search_type" value="$search_type">
@@ -1565,30 +1581,32 @@ sub update_details {
 
 	#prints the user form
 	print <<eof;
-<form id="update_details_form" method="POST" action="">
-<table>
-  <tr>
-    <td><b>Suburb:</b></td>
-    <td><input type="text" name="suburb" value="$suburb" style="width:250px;"></td>
-  </tr>
-  <tr>
-    <td><b>Latitude:</b></td>
-    <td><input type="text" name="lat" value="$latitude" style="width:250px;"></td>
-  </tr>
-  <tr>
-    <td><b>Longitude:</b></td>
-    <td><input type="text" name="long" value="$longitude" style="width:250px;"></td>
-  </tr>
-  <tr>
-    <td style="vertical-align: text-top;"><b>About Me:</b></td>
-    <td><textarea name="about_me" onkeydown="auto_submit(event);" style="width: 250px; height: 100px; resize: none;">$about</textarea></td>
-  </tr>
-  <tr><td></td><td style="text-align: right;">
-    <input type="submit" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
-    <input type="submit" name="cancel_update" value="Cancel" class="bitter_button">
-  </td></tr>
-</table>
-</form>
+<center>
+  <div class="bitter_subheading">Change Personal Details</div>
+  <p>
+  <form id="update_details_form" method="POST" action="">
+  <table><tr>
+      <td><b>Suburb:</b></td>
+      <td><input type="text" name="suburb" value="$suburb" style="width:250px;"></td>
+    </tr>
+    <tr>
+      <td><b>Latitude:</b></td>
+      <td><input type="text" name="lat" value="$latitude" style="width:250px;"></td>
+    </tr>
+    <tr>
+      <td><b>Longitude:</b></td>
+      <td><input type="text" name="long" value="$longitude" style="width:250px;"></td>
+    </tr>
+    <tr>
+      <td style="vertical-align: text-top;"><b>About Me:</b></td>
+      <td><textarea name="about_me" onkeydown="auto_submit(event);" style="width: 250px; height: 100px; resize: none;">$about</textarea></td>
+    </tr>
+    <tr><td></td><td style="text-align: right;">
+      <input type="submit" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
+      <input type="submit" name="cancel_update" value="Cancel" class="bitter_button">
+    </td></tr></table>
+  </form>
+</center>
 
 <script type="text/javascript">
   function update_details() {
@@ -1634,6 +1652,113 @@ sub update_user_details {
 	close DETAILS;
 
 	display_user_profile("$users_dir/$user");
+}
+
+#provides a form for changing the current users' account settings
+sub change_account_settings_form {
+	my $current_user = $_[0];
+	my $warnings = $_[1] || '';
+	my $details_filename = "$users_dir/$current_user/details.txt";
+	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
+	my $full_name = my $email = "";
+	my $reply = my $listen = "checked";
+
+	#extracts relevant user information
+	foreach $line (<DETAILS>) {
+		$full_name = $1 if $line =~ /^full_name: (.+)/;
+		$email = $1 if $line =~ /^email: (.+)/;
+		$reply = "" if $line =~ /^reply_notify: false/;
+		$listen = "" if $line =~ /^listen_notify: false/;
+	}
+
+	close DETAILS;
+
+	#prints the user form
+	print <<eof;
+<center>
+  <div class="bitter_subheading">Account Information and Preferences</div>
+  <p>
+  <font color="red">$warnings</font>
+  <form id="account_info_form" method="POST" action="">
+    <table><tr>
+      <td><b>Full Name:</b></td>
+      <td><input type="text" name="full_name" value="$full_name" style="width:300px;"></td>
+    </tr>
+    <tr>
+      <td><b>Email:</b></td>
+      <td><input type="text" name="email" value="$email" style="width:300px;">      <input type="hidden" name="user_email" value="$email"></td>
+    </tr>
+    <tr><td></td></tr><tr><td></td></tr></table>
+
+    <table><tr><td></td></tr><tr>
+      <tr>
+        <td><input type="checkbox" name="reply_notify" onclick="auto_submit();" $reply>Notify me when I get a reply to one of my bleats</td>
+      </tr>
+      <tr>
+        <td><input type="checkbox" name="listen_notify" onclick="auto_submit();" $listen>Notify me when I gain a new listener</td>
+      </tr>
+      <tr><td></td></tr><tr><td></td></tr></table>
+
+    <input type="submit" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
+    <input type="submit" name="cancel_update" value="Cancel" class="bitter_button">
+  </form>
+  <p>
+
+  <form id="admin_form" method="POST" action="">
+    <input type="submit" name="change_pasword" value="Change Password" class="bitter_button">
+    <input type="submit" name="suspend_account" value="Suspend Account" class="bitter_button">
+    <input type="submit" name="delete_account" value="Delete Account" class="bitter_button">
+  </form>
+</center>
+
+<script type="text/javascript">
+  function update_details() {
+      document.getElementById("account_info_form").submit();
+  }
+
+  function auto_submit(e) {
+    if (e.keyCode === 13) {
+      document.getElementById("account_info_form").submit();
+    }
+  }
+</script>
+eof
+}
+
+#changes the relevant account settings for the current user
+sub change_account_settings {
+	my ($current_user, $full_name, $email) = @_;
+	my $details_filename = "$users_dir/$current_user/details.txt";
+	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
+
+	#saves all existing user information except for full name and email
+	while (<DETAILS>) {
+		if ($_ !~ /^full_name:/ && $_ !~ /^email:/ && $_ !~ /^(listen|reply)_notify:/) {
+			push @new_info, $_;
+		}
+	}
+
+	close DETAILS;
+
+	#writes out new user information
+	open DETAILS, ">", $details_filename or die "Cannot open $details_filename: $!";
+	push @new_info, "full_name: $full_name\n";
+	push @new_info, "email: $email\n";
+	push @new_info, "reply_notify: false\n" if !defined param('reply_notify');
+	push @new_info, "listen_notify: false\n" if !defined param('listen_notify');
+	print DETAILS $_ foreach @new_info;
+	close DETAILS;
+
+	#navigates to user profile and alerts of succes
+	display_page_banner();
+	display_user_profile("$users_dir/$current_user");
+	print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Your account settings have been updated.");
+  }
+</script>
+eof
 }
 
 #sanitises and pushes to data collection the given user details
