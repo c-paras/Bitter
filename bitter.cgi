@@ -8,7 +8,7 @@ use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
 use Digest::MD5 qw(md5_hex);
 use File::Path qw(remove_tree);
 
-$debug = 1;
+$debug = 0;
 
 #declares global variables relating to user data
 $dataset_size = "medium";
