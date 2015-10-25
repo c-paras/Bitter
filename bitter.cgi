@@ -1435,7 +1435,7 @@ sub display_search_results {
 	$displayed_up_to = param('num_displayed') || 0;
 	$display_up_to = $displayed_up_to + 16; #displays next 16 results
 
-	#aborts if user did not enter a valid search phrase 
+	#aborts if user did not enter a valid search phrase
 	if (length($search) == 0 || $search eq " ") {
 		print "Please enter a valid search phrase.\n";
 		return;
@@ -1691,7 +1691,7 @@ sub update_details {
 
 	#extracts relevant user information
 	foreach $line (<DETAILS>) {
-		$suburb = $1 if $line =~ /^home_suburb: (.+)/;	
+		$suburb = $1 if $line =~ /^home_suburb: (.+)/;
 		$latitude = $1 if $line =~ /^home_latitude: (.+)/;
 		$longitude = $1 if $line =~ /^home_longitude: (.+)/;
 		$about = $1 if $line =~ /^about_me: (.+)/;
@@ -1957,7 +1957,7 @@ sub delete_user_account {
 		unlink "$bleats_dir/$_" or die "Cannot remove $bleats_dir/$_: $!";
 	}
 	close BLEATS;
-	
+
 	#revokes unique token for the current session
 	my $token_file = "tokens/$token";
 	if (-e $token_file) {
