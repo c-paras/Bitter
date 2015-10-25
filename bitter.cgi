@@ -126,6 +126,18 @@ if (defined $token) {
 		} elsif (defined param('suburb') && defined param('lat') && defined param('long') && defined param('about_me')) {
 			display_page_banner();
 			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
+		} elsif (defined param('profile_image')) {
+			display_page_banner();
+			profile_image_form("$users_dir/$current_user[0]");
+		} elsif (defined param('cancel_upload')) {
+			display_page_banner();
+			display_user_profile("$users_dir/$current_user[0]");
+		} elsif (defined param('upload_image') && defined param('profile_picture')) {
+			display_page_banner();
+			change_profile_image("$users_dir/$current_user[0]", param('profile_picture'));
+		} elsif (defined param('remove_profile_image')) {
+			display_page_banner();
+			remove_profile_image("$users_dir/$current_user[0]");
 		} else {
 			display_login_page();
 		}
@@ -236,13 +248,13 @@ sub display_login_page {
       <tr><td><input type="password" name="password" class="bitter_textfield"></td></tr>
     </table>
     <p>
-    <input type="submit" name="login" value="Login" class="bitter_button">
+    <input type="submit" name="login" value="Log In" class="bitter_button">
     <input type="button" name="reset" value="Reset password" onclick="reset_password();" class="bitter_button">
     <input type="hidden" name="email" id="email">
   </form>
 
   <form method="POST" action="">
-    <input type="submit" name="create_account" value="Create account" class="bitter_button">
+    <input type="submit" name="create_account" value="Create an Account" class="bitter_button">
   </form>
 </center>
 
@@ -636,7 +648,7 @@ sub display_page_banner {
       <td>
         <div class="bitter_subheading">Bitter |</div>
         <input type="submit" name="home" value="Home" class="bitter_button">
-        <input type="submit" name="settings" value="Settings" class="bitter_button">
+        <input type="submit" name="settings" value="Account Settings" class="bitter_button">
         <input type="text" name="search_phrase" value="$search_phrase" onkeypress="perform_search(event);">
         <select name="search_type" class="bitter_button">
 eof
@@ -650,7 +662,7 @@ eof
 	print <<eof;
         </select>
         <input type="submit" name="search" id="search" value="Search" class="bitter_button">
-        <input type="submit" name="logout" value="Logout" class="bitter_button">
+        <input type="submit" name="logout" value="Log Out" class="bitter_button">
       </td>
     </tr>
   </table>
@@ -680,7 +692,7 @@ sub display_user_profile {
 
 	#updates profile image from default if a profile image is available
 	my @profile_image = glob("$user_to_show/profile.*");
-	$image_filename = $_ foreach (@profile_image);
+	$image_filename = $_ foreach @profile_image;
 
 	#finds currently logged-in user
 	my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
@@ -758,7 +770,7 @@ eof
 	if ($user eq $current_user[0]) {
 		$details .= <<eof;
 <form method="POST" action="">
-  <input type="submit" name="update" value="Update details" class="bitter_button">
+  <input type="submit" name="update" value="Update Details" class="bitter_button"> <input type="submit" name="profile_image" value="Change Profile Image" class="bitter_button">
 </form>
 </div>
 eof
@@ -806,6 +818,126 @@ sub bleat_block {
 </script>
 
 eof
+}
+
+#provides user form for uploading/changing/deleting profile image
+sub profile_image_form {
+	my $user = $_[0];
+	my $username = $user;
+	$username =~ s/^.*\///;
+	my $image_filename = "profile_default.jpg"; #default profile image
+
+	#updates profile image from default if a profile image is available
+	my @profile_image = glob("$user/profile.*");
+	$image_filename = $_ foreach @profile_image;
+
+	#prints out the user form and an image preview
+	print <<eof;
+<center>
+  <b>Preview:</b><p>
+  <img id="image_preview" src="$image_filename" alt="$username profile image">
+  <form id="change_profile_image" method="POST" action="">
+    <table>
+      <tr><td>
+        <input type="file" name="profile_picture" id="profile_picture" accept="image/*" onchange="update_preview();">
+      </td></tr><tr><td>
+        <input type="submit" name="upload_image" value="Upload Image" class="bitter_button">
+        <input type="button" name="remove_image" value="Remove Image" onclick="confirm_image_deletion();" class="bitter_button">
+        <input type="submit" name="cancel_upload" value="Cancel" class="bitter_button">
+        <input type="hidden" name="remove_profile_image">
+      </td></tr>
+    </table>
+  </form>
+</center>
+
+<script type="text/javascript">
+  function update_preview() {
+    var image = document.getElementById("profile_picture").value;
+    document.getElementById("image_preview").src = image;
+  }
+
+  function confirm_image_deletion() {
+    var response = confirm("Are you sure you want to remove your profile image?");
+    if (response === true) {
+      document.getElementById("change_profile_image").submit();
+    }
+  }
+</script>
+eof
+}
+
+#deletes the current users' profile image
+sub remove_profile_image {
+	my $user = $_[0];
+	my $image_filename = "profile_default.jpg"; #default profile image
+
+	#updates profile image from default if a profile image is available
+	my @profile_image = glob("$user/profile.*");
+	$image_filename = $_ foreach @profile_image;
+
+	if ($image_filename ne "profile_default.jpg") {
+		#removes profile image iff it exists
+		unlink $image_filename or die "Cannot remove $image_filename: $!";
+		display_user_profile($user);
+	} else {
+		#displays message of failure if no user profile image exists
+		display_user_profile($user);
+		print <<eof;
+
+<script type="text/javascript">
+  window.onload = function() {
+    alert("No profile image to remove.");
+  }
+</script>
+eof
+	}
+
+}
+
+#changes the current user's profile image
+sub change_profile_image {
+	my ($user, $new_image) = @_;
+
+	#aborts if image does not exist or is invalid
+	if (! -e $new_image || $new_image !~ /\.[^\.]+$/) {
+		display_user_profile($user);
+		print <<eof;
+
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Unable to upload image.");
+  }
+</script>
+eof
+	} else {
+		my $image_filename = "profile_default.jpg"; #default profile image
+
+		#updates profile image from default if a profile image is available
+		my @profile_image = glob("$user/profile.*");
+		$image_filename = $_ foreach @profile_image;
+
+		#removes current profile image if one exists
+		if ($image_filename ne "profile_default.jpg") {
+			unlink $image_filename or die "Cannot remove $image_filename: $!";
+		}
+
+		#reads the new profile image
+		open IMAGE, "<", $new_image or die "Cannot open $new_image: $!";
+		@profile_image = <IMAGE>;
+		close IMAGE;
+
+		#generates new profile image filename
+		my ($extension) = $new_image =~ /\.([^\.]+)$/;
+		$image_filename = "$user/profile.$extension";
+
+		#saves image in user's directory
+		open IMAGE, ">", $image_filename or die "Cannot write $image_filename: $!";
+		print IMAGE $_ foreach @profile_image;
+		close IMAGE;
+
+		display_user_profile($user);
+	}
+
 }
 
 #provides option buttons for replying to a bleat and listening/unlistening user
@@ -1098,7 +1230,7 @@ sub delete_bleat_option {
 	#sets up delete button and javascript to confirm deletion
 	my $form_to_return = <<eof;
 
-<input type="button" name="delete_bleat" value="Delete bleat" onclick="confirm_deletion($bleat_id);" class="bitter_button">
+<input type="button" name="delete_bleat" value="Delete this bleat" onclick="confirm_deletion($bleat_id);" class="bitter_button">
 eof
 
 	return $form_to_return;
