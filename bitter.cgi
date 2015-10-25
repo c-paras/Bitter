@@ -1140,7 +1140,6 @@ sub format_bleats {
 		encode_output($bleat_to_display);
 		$bleat_to_display =~ s/\s{2,}/ /g; #condenses whitespace
 		$bleat_to_display =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
-
 		my $url = "?profile_to_view=$users_dir/$bleater";
 		$bleats_to_display .= "<a href=\"$url\">$bleater</a> bleated <i>$bleat_to_display</i>";
 

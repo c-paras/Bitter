@@ -24,4 +24,4 @@ Date		Time		Activity	Description
 24/10/2015	11:00-12:10	debugging	fixed password recovery and security bugs
 24/10/2015	12:45-15:00	coding		partially implemented user account creation
 24/10/2015	15:30-21:10	coding		finished user account creation, fixed displaying of duplicate bleats, fixed layout slightly
-25/10/2015	10:30-13:20	coding		implemented changing/uploading/deleting of profile images
+25/10/2015	10:30-13:50	coding		implemented changing/uploading/deleting of profile images, adding links to user profiles when vewing bleats
