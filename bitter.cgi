@@ -1141,7 +1141,7 @@ sub format_bleats {
 		$bleat_to_display =~ s/\s{2,}/ /g; #condenses whitespace
 		$bleat_to_display =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
 
-		my $url = "bitter.cgi?profile_to_view=$users_dir/$bleater";
+		my $url = "?profile_to_view=$users_dir/$bleater";
 		$bleats_to_display .= "<a href=\"$url\">$bleater</a> bleated <i>$bleat_to_display</i>";
 
 		#provides info about original bleat if applicable
@@ -1159,7 +1159,7 @@ sub format_bleats {
 			encode_output($bleated);
 			$bleated =~ s/\s{2,}/ /g; #condenses whitespace
 			$bleated =~ s/\s*(.+)\s*/$1/; #removes leading and trailing whitespace
-			$url = "bitter.cgi?profile_to_view=$users_dir/$bleater";
+			$url = "?profile_to_view=$users_dir/$bleater";
 			$bleats_to_display .= " in response to a bleat by <a href=\"$url\">$bleater</a>: <i>$bleated</i>";
 			close BLEAT;
 		}
