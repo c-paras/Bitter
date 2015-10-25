@@ -28,4 +28,4 @@ Date		Time		Activity	Description
 25/10/2015	14:20-18:45	coding		added image border and partially implemented account settings
 25/10/2015	19:15-19:55	coding		implemented notification via email of listening and replying
 25/10/2015	20:30-21:00	coding		implemented notification via email for mentioning in bleat
-25/10/2015	21:30-23:00	coding		implemented suspension and reactivation of user account and account deletion
+25/10/2015	21:30-23:20	coding		implemented suspension and reactivation of user account and account deletion
