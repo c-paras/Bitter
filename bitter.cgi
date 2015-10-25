@@ -354,7 +354,7 @@ sub reset_password_form {
       <tr><td><input type="password" name="confirm_password" class="bitter_textfield"></td></tr>
     </table>
     <p>
-    <input type="submit" name="change_password" value="Reset password" class="bitter_button">
+    <input type="submit" name="change_password" value="Reset Password" class="bitter_button">
     <input type="hidden" name="username" value="$user">
     <input type="hidden" name="password_rnd" value="$token">
   </form>
@@ -463,7 +463,7 @@ sub create_account_form {
       <tr><td><input type="password" name="confirm_password" class="bitter_textfield"></td></tr>
     </table>
     <p>
-    <input type="submit" name="create" value="Create account" class="bitter_button">
+    <input type="submit" name="create" value="Create Account" class="bitter_button">
   </form>
 </center>
 eof
