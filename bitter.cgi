@@ -168,7 +168,7 @@ eof
 		$token = md5_hex(time() + $$);
 		chomp $token;
 
-		#stores token in direcotry
+		#stores token in directory
 		$token_file = "tokens/$token";
 		mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
 		open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
@@ -198,7 +198,7 @@ eof
 	print_page_header();
 	reset_password(param('email'));
 } elsif (defined param('reset_password') && defined param('username')) {
-	#navigates to form for restting password
+	#navigates to form for resetting password
 	print_page_header();
 	reset_password_form(param('reset_password'), param('username'));
 } elsif (defined param('change_password')) {
@@ -273,7 +273,7 @@ sub display_login_page {
     if (result !== "" && result.match(/.+@.+/)) {
       result = result.replace(/[^$valid_email_chars]/g, '');
       document.getElementById("email").value = result;
-      alert("If the email you provided is linked to an account, you will recieve an email with instructions shortly.");
+      alert("If the email you provided is linked to an account, you will receive an email with instructions shortly.");
       document.getElementById("login_form").submit();
     } else {
       alert("Please enter a valid email.");
@@ -306,7 +306,7 @@ sub reset_password {
 			my $unique_rnd = md5_hex(time() + $$);
 			chomp $unique_rnd;
 
-			#stores token in direcotry
+			#stores token in directory
 			$token_file = "tokens/$unique_rnd-$username";
 			mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
 			open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
@@ -370,7 +370,7 @@ sub change_password {
 	my $user_file = "$users_dir/$username/details.txt";
 	open USER, "<", $user_file or die "Cannot open $user_file: $!";
 
-	#extracts user information and seperates the old password
+	#extracts user information and separates the old password
 	while (<USER>) {
 		push @user_data, $_ if $_ !~ /^password:/;
 		$current_password = $1 if $_ =~ /^password: (.+)/;
@@ -580,7 +580,7 @@ sub confirm_account_creation {
 	my $unique_rnd = md5_hex(time() + $$);
 	chomp $unique_rnd;
 
-	#stores token file in direcotry along with user details
+	#stores token file in directory along with user details
 	$token_file = "tokens/$unique_rnd-$username";
 	mkdir "tokens" or die "Cannot create tokens: $!" if ! -e "tokens";
 	open TOKEN, ">", $token_file or die "Cannot write $token_file: $!";
@@ -599,12 +599,12 @@ eof
 	print MAIL "Copy and paste this link into your browser to complete account creation: $account_url";
 	close MAIL;
 
-	#outputs login page with alert of incomming email
+	#outputs login page with alert of incoming email
 	display_login_page();
 	print <<eof;
 <script type="text/javascript">
   window.onload = function() {
-    alert("You will recieve an email to complete account creation shortly.");
+    alert("You will receive an email to complete account creation shortly.");
   }
 </script>
 eof
@@ -1445,7 +1445,7 @@ sub display_search_results {
 	$i = find_user_results($search) if $search_type eq "users";
 	$i = find_bleat_results($search) if $search_type eq "bleats";
 
-	#dispays results which matched $search or a message that no results were found
+	#displays results which matched $search or a message that no results were found
 	if (@bleat_matches) {
 		my @current_user = $ENV{HTTP_COOKIE} =~ /\buser=([\w]+)/;
 		$current_user[0] = param('username') if param('username');
@@ -1890,7 +1890,7 @@ sub change_account_settings {
 	print DETAILS $_ foreach @new_info;
 	close DETAILS;
 
-	#navigates to user profile and alerts of succes
+	#navigates to user profile and alerts of success
 	display_page_banner();
 	display_user_profile("$users_dir/$current_user");
 	print <<eof;
@@ -1958,7 +1958,7 @@ sub delete_user_account {
 	}
 	close BLEATS;
 	
-	#revokes unqiue token for the current session
+	#revokes unique token for the current session
 	my $token_file = "tokens/$token";
 	if (-e $token_file) {
 		unlink $token_file or die "Cannot remove $token_file: $!";
