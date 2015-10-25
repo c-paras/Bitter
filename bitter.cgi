@@ -125,11 +125,11 @@ if (defined $token) {
 		} elsif (defined param('cancel_update')) {
 			display_page_banner();
 			display_user_profile("$users_dir/$current_user[0]");
-		} elsif (defined param('change_details')) {
-			validate_account_information(param('full_name'), $current_user[0], param('email'), '', '', $current_user[0], param('user_email'));
 		} elsif (defined param('suburb') && defined param('lat') && defined param('long') && defined param('about_me')) {
 			display_page_banner();
 			update_user_details(param('suburb'), param('lat'), param('long'), param('about_me'), $current_user[0]);
+		} elsif (defined param('change_details')) {
+			validate_account_information(param('full_name'), $current_user[0], param('email'), '', '', $current_user[0], param('user_email'));
 		} elsif (defined param('profile_image')) {
 			display_page_banner();
 			profile_image_form("$users_dir/$current_user[0]");
@@ -1707,22 +1707,22 @@ sub update_details {
   <form id="update_details_form" method="POST" action="">
   <table><tr>
       <td><b>Suburb:</b></td>
-      <td><input type="text" name="suburb" value="$suburb" style="width:250px;"></td>
+      <td><input type="text" name="suburb" value="$suburb" onkeydown="auto_submit(event);" style="width:250px;"></td>
     </tr>
     <tr>
       <td><b>Latitude:</b></td>
-      <td><input type="text" name="lat" value="$latitude" style="width:250px;"></td>
+      <td><input type="text" name="lat" value="$latitude" onkeydown="auto_submit(event);" style="width:250px;"></td>
     </tr>
     <tr>
       <td><b>Longitude:</b></td>
-      <td><input type="text" name="long" value="$longitude" style="width:250px;"></td>
+      <td><input type="text" name="long" value="$longitude" onkeydown="auto_submit(event);" style="width:250px;"></td>
     </tr>
     <tr>
       <td style="vertical-align: text-top;"><b>About Me:</b></td>
       <td><textarea name="about_me" onkeydown="auto_submit(event);" style="width: 250px; height: 100px; resize: none;">$about</textarea></td>
     </tr>
     <tr><td></td><td style="text-align: right;">
-      <input type="submit" name="change_details" id="change_details" value="Update" onclick="update_details();" class="bitter_button">
+      <input type="submit" name="change_details" id="change_details" value="Update" class="bitter_button">
       <input type="submit" name="cancel_update" value="Cancel" class="bitter_button">
     </td></tr></table>
   </form>
