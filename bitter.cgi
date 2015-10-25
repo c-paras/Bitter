@@ -6,6 +6,7 @@
 use CGI qw(:all);
 use CGI::Carp qw(fatalsToBrowser warningsToBrowser);
 use Digest::MD5 qw(md5_hex);
+use File::Path qw(remove_tree);
 
 $debug = 1;
 
@@ -143,6 +144,8 @@ if (defined $token) {
 			remove_profile_image("$users_dir/$current_user[0]");
 		} elsif (defined param('admin_operation') && param('admin_operation') eq "suspend") {
 			suspend_user_account($current_user[0]);
+		} elsif (defined param('admin_operation') && param('admin_operation') eq "delete") {
+			delete_user_account($current_user[0]);
 		} else {
 			display_login_page();
 		}
@@ -742,6 +745,7 @@ sub user_details {
 	open DETAILS, "<", $details_filename or die "Cannot open $details_filename: $!";
 	my $location = my $latitude = my $longitude = my $about = "Unknown";
 	$listens_to_display = $listens = "None";
+	my $suspended_account = 0;
 
 	#extracts non-sensitive user information
 	foreach $line (<DETAILS>) {
@@ -776,6 +780,16 @@ sub user_details {
 		return "You do not have access to view this account.";
 	} elsif ($suspended_account == 1) {
 		reactivate_account($current_user[0]);
+	}
+
+	#removes listens if the user does not exist
+	if ($listens_to_display ne "None") {
+		@listens = split /\n/, $listens_to_display;
+		foreach (@listens) {
+			chomp $_;
+			push @new_listens, "$_\n" if -e "$users_dir/$_";
+		}
+		$listens_to_display = join '', @new_listens;
 	}
 
 	#appends user details to profile box
@@ -1136,9 +1150,11 @@ sub user_bleats {
 
 	#obtains list of user's bleats
 	return if $bleats_filename =~ /None\/bleats.txt$/;
-	open BLEATS, "<", $bleats_filename or die "Cannot open $bleats_filename: $!";
-	push @user_bleats, <BLEATS>;
-	close BLEATS;
+	if (-e $bleats_filename) {
+		open BLEATS, "<", $bleats_filename or die "Cannot open $bleats_filename: $!";
+		push @user_bleats, <BLEATS>;
+		close BLEATS;
+	}
 
 	#returns bleats of users listened to by logged in user
 	if ($show_relevant eq "-supress_recursion") {
@@ -1242,7 +1258,7 @@ sub format_bleats {
 		$bleats_to_display .= "<a href=\"$url\">$bleater</a> bleated <i>$bleat_to_display</i>";
 
 		#provides info about original bleat if applicable
-		if ($reply ne "") {
+		if ($reply ne "" && -e "$bleats_dir/$reply") {
 			my $bleat_file = "$bleats_dir/$reply";
 			open BLEAT, "<", $bleat_file or die "Cannot open $bleat_file: $!";
 			my $bleater = "";
@@ -1814,7 +1830,7 @@ sub change_account_settings_form {
 
   <form id="admin_form" method="POST" action="">
     <input type="button" name="suspend_account" value="Suspend Account" onclick="suspend_account_confirmation();" class="bitter_button">
-    <input type="button" name="delete_account" value="Delete Account" class="bitter_button">
+    <input type="button" name="delete_account" value="Delete Account" onclick="delete_account_confirmation();" class="bitter_button">
     <input type="hidden" name="admin_operation" id="admin_operation">
   </form>
 </center>
@@ -1834,6 +1850,14 @@ sub change_account_settings_form {
     var response = confirm("This will hide your profile from other Bitter users.\\nYour previous bleats will remain visible to others.\\nYou can reactivate your account automatically by logging in at any time.");
     if (response === true) {
       document.getElementById("admin_operation").value = "suspend";
+      document.getElementById("admin_form").submit();
+    }
+  }
+
+  function delete_account_confirmation() {
+    var response = confirm("This will permanently remove your Bitter account and associated bleats.\\nAre you sure you wish to proceed?");
+    if (response === true) {
+      document.getElementById("admin_operation").value = "delete";
       document.getElementById("admin_form").submit();
     }
   }
@@ -1896,7 +1920,7 @@ sub suspend_user_account {
 	print <<eof;
 <script type="text/javascript">
   window.onload = function() {
-    alert("Your account has been suspended, as requested.");
+    alert("Your Bitter account has been suspended, as requested.");
   }
 </script>
 eof
@@ -1918,6 +1942,38 @@ sub reactivate_account {
 	open DETAILS, ">", $details_filename or die "Cannot write $details_filename: $!";
 	print DETAILS @user_details;
 	close DETAILS;
+}
+
+#deletes the current user's profile
+sub delete_user_account {
+	my $username = $_[0];
+	my $user_dir = "$users_dir/$username";
+	my $bleats = "$users_dir/$username/bleats.txt";
+
+	#removes bleats sent by the current user
+	open BLEATS, "<", $bleats or die "Cannot open $bleats: $!";
+	while (<BLEATS>) {
+		chomp $_;
+		unlink "$bleats_dir/$_" or die "Cannot remove $bleats_dir/$_: $!";
+	}
+	close BLEATS;
+	
+	#revokes unqiue token for the current session
+	my $token_file = "tokens/$token";
+	if (-e $token_file) {
+		unlink $token_file or die "Cannot remove $token_file: $!";
+	}
+
+	#removes user directory and navigates to the login page
+	remove_tree($user_dir) or die "Cannot remove $user_dir: $!";
+	display_login_page();
+	print <<eof;
+<script type="text/javascript">
+  window.onload = function() {
+    alert("Your Bitter account has been deleted, as requested.");
+  }
+</script>
+eof
 }
 
 #sanitises and pushes to data collection the given user details
